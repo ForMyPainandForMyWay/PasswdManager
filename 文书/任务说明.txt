@@ -1,0 +1,38 @@
+你现在是一位资深的 Apple 生态架构师和应用安全专家。我需要你为我输出一份详细的“密码管理器 App”开发规划书。
+
+【项目背景】
+我想使用 Swift 生态开发一款独立的密码管理器，主打“高安全性、零知识证明、高级群组化管理和更优秀的可视化 UI”。
+开发顺序需严格遵循：先开发“后端”（包含底层数据结构、加密解密逻辑、Keychain 管理、云同步机制），再开发“前端”（SwiftUI 界面、生物识别解锁、密码自动填充扩展）。
+
+【技术栈要求】
+- 语言：100% Swift
+- 存储：SwiftData (存储非敏感元数据如分组、图标) + Keychain Services (存储敏感密码)
+- 加密：CryptoKit + Secure Enclave (硬件级加密支持)
+- 验证：LocalAuthentication (Face ID / Touch ID)
+- 前端：SwiftUI (主应用) + Credential Provider Extension (系统级密码自动填充)
+- 同步：CloudKit (使用零知识架构进行跨设备同步) 或 Server-Side Swift (Vapor)
+
+【请按以下结构为我输出开发规划书】：
+
+### 阶段一：系统架构设计 (Architecture)
+1. 解释数据是如何流转的（从用户输入 -> 本地加密 -> Keychain存储 -> SwiftData索引建立 -> CloudKit同步）。
+2. 说明“零知识证明”架构在此 App 中的具体实现方案（确保即使用户的 CloudKit 被攻破，攻击者也无法解密密码）。
+
+### 阶段二：“后端”与核心安全层开发规划 (Core Backend & Security)
+请提供这一阶段的详细开发步骤，并给出核心模块的 Swift 代码接口设计（Protocols / Structs）：
+1. 主密钥管理：如何利用 Secure Enclave 生成和管理 Master Key。
+2. 加密引擎：基于 CryptoKit 封装的加解密工具类（AES-GCM 等）。
+3. 数据库与安全存储隔离方案：SwiftData 的 Model 设计（定义 Group、Tag、Item的关联），以及它如何与 Keychain 中的真实密码解耦、映射。
+4. 数据同步层：构建基于 CloudKit 的加密数据同步逻辑。
+
+### 阶段三：“前端”与系统集成开发规划 (Frontend & System UI)
+基于“后端”已完成的接口，规划前端开发步骤：
+1. UI 架构：基于 SwiftUI 和 MVVM（或 TCA）的状态管理方案。
+2. 核心视图规划：应用解锁页面（Face ID）、仪表盘、群组/标签分类视图、密码详情与编辑页。
+3. 系统集成：如何开发 `ASCredentialProviderViewController`，让 App 支持在 Safari 和其他 App 中自动弹出填充建议。
+
+### 阶段四：测试与安全审计 (Testing & Security Audit)
+1. 列出本项目必须覆盖的关键单元测试（如：断网环境、Keychain 读写失败、加密数据篡改测试）。
+2. Apple 审核防拒指南：指出密码类 App 在提交 App Store 时需要注意的权限声明和审核重点。
+
+请以专业、严谨的开发者视角撰写，重点突出“安全性（Security）”与“数据结构（Data Modeling）”的结合。

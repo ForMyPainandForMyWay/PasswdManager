@@ -1,0 +1,297 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E650413750DC4F1B93F00BF7 /* PwdSafe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PwdSafe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		389AAE3307114A1D96C9CB8C /* PwdSafeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PwdSafeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		80112DC6449649A88F93CBD3 /* PwdSafe */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				34D510C60F924558853091C5 /* Exceptions for "PwdSafe" folder in "PwdSafe" target */,
+			);
+			path = PwdSafe;
+			sourceTree = "<group>";
+		};
+		FFD88E2917EF47069CC5E4D9 /* PwdSafeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E13BE93DE5CB4F87949A21D9 /* Exceptions for "PwdSafeTests" folder in "PwdSafeTests" target */,
+			);
+			path = PwdSafeTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		34D510C60F924558853091C5 /* Exceptions for "PwdSafe" folder in "PwdSafe" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+			);
+			target = 317BE1B855B5424D87CD5B81 /* PwdSafe */;
+		};
+		E13BE93DE5CB4F87949A21D9 /* Exceptions for "PwdSafeTests" folder in "PwdSafeTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+			);
+			target = 828B180BE01B43EC8B47CB00 /* PwdSafeTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		16F8262B56A44BC9B88580B1 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		5C72EC3C1A064AAD99C32E27 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05BACD8E9C6B4E05B050CC1A = {
+			isa = PBXGroup;
+			children = (
+				80112DC6449649A88F93CBD3 /* PwdSafe */,
+				FFD88E2917EF47069CC5E4D9 /* PwdSafeTests */,
+				2BD11E2BB891473BBE13CD94 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2BD11E2BB891473BBE13CD94 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E650413750DC4F1B93F00BF7 /* PwdSafe.app */,
+				389AAE3307114A1D96C9CB8C /* PwdSafeTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		317BE1B855B5424D87CD5B81 /* PwdSafe */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 890D90AB024A4DC48B6A9A3A /* Build configuration list for PBXNativeTarget "PwdSafe" */;
+			buildPhases = (
+				7D9C2D2FC1E04470A5476AC1 /* Sources */,
+				16F8262B56A44BC9B88580B1 /* Frameworks */,
+				08A16DBC65D640D99175EE6C /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (
+				80112DC6449649A88F93CBD3 /* PwdSafe */,
+			);
+			name = PwdSafe;
+			packageProductDependencies = ();
+			productName = PwdSafe;
+			productReference = E650413750DC4F1B93F00BF7 /* PwdSafe.app */;
+			productType = "com.apple.product-type.application";
+		};
+		828B180BE01B43EC8B47CB00 /* PwdSafeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 82F673F27F874BFEA48D734D /* Build configuration list for PBXNativeTarget "PwdSafeTests" */;
+			buildPhases = (
+				B7FA5D1D836E4281ACA71AC6 /* Sources */,
+				5C72EC3C1A064AAD99C32E27 /* Frameworks */,
+			);
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (
+				FFD88E2917EF47069CC5E4D9 /* PwdSafeTests */,
+			);
+			name = PwdSafeTests;
+			packageProductDependencies = ();
+			productName = PwdSafeTests;
+			productReference = 389AAE3307114A1D96C9CB8C /* PwdSafeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		215D58BA303E47A4979CC58B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+			};
+			buildConfigurationList = AC9079DEFED54B1795AAC970 /* Build configuration list for PBXProject "PwdSafe" */;
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base, "zh-Hans");
+			mainGroup = 05BACD8E9C6B4E05B050CC1A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2BD11E2BB891473BBE13CD94 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				317BE1B855B5424D87CD5B81 /* PwdSafe */,
+				828B180BE01B43EC8B47CB00 /* PwdSafeTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		08A16DBC65D640D99175EE6C /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7D9C2D2FC1E04470A5476AC1 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B7FA5D1D836E4281ACA71AC6 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D7C02A5A6E9F4A82811E8314 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = "15.0";
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		EEFBB6391C6543F791C0EE95 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
+				MACOSX_DEPLOYMENT_TARGET = "15.0";
+				MTL_ENABLE_DEBUG_INFO = NO;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6F60A0414EB64D3190053A35 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)",
+				"@executable_path/../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.pwdsafe.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		60F1D0A38A3E43A9BA121706 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)",
+				"@executable_path/../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.pwdsafe.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		14C8F1348A7F43C3BC733617 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.pwdsafe.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C7DA30F9F4114972854ABEC2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.pwdsafe.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AC9079DEFED54B1795AAC970 /* Build configuration list for PBXProject "PwdSafe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D7C02A5A6E9F4A82811E8314 /* Debug */,
+				EEFBB6391C6543F791C0EE95 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		890D90AB024A4DC48B6A9A3A /* Build configuration list for PBXNativeTarget "PwdSafe" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6F60A0414EB64D3190053A35 /* Debug */,
+				60F1D0A38A3E43A9BA121706 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		82F673F27F874BFEA48D734D /* Build configuration list for PBXNativeTarget "PwdSafeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14C8F1348A7F43C3BC733617 /* Debug */,
+				C7DA30F9F4114972854ABEC2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = 215D58BA303E47A4979CC58B /* Project object */;
+}
