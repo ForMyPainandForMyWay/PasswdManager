@@ -41,33 +41,51 @@ enum NavigationItem: Hashable, Identifiable {
 struct VaultWindowView: View {
     @State private var repository = VaultRepository()
     @State private var selectedNavigation: NavigationItem = .allItems
+    @State private var isInitializing: Bool = true
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(
-                repository: repository,
-                selectedNavigation: $selectedNavigation
-            )
-            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
-        } content: {
-            ItemListView(
-                repository: repository,
-                selectedNavigation: selectedNavigation
-            )
-            .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 500)
-        } detail: {
-            ItemDetailView(repository: repository)
-        }
-        .onAppear {
-            if repository.items.isEmpty {
-                repository.loadSampleData()
+        Group {
+            if isInitializing {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .scaleEffect(1.2)
+                    Text("正在初始化保险库...")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 960, height: 640)
+            } else {
+                NavigationSplitView {
+                    SidebarView(
+                        repository: repository,
+                        selectedNavigation: $selectedNavigation
+                    )
+                    .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
+                } content: {
+                    ItemListView(
+                        repository: repository,
+                        selectedNavigation: selectedNavigation
+                    )
+                    .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 500)
+                } detail: {
+                    ItemDetailView(repository: repository)
+                }
+                .sheet(isPresented: $repository.isEditorPresented) {
+                    if let item = repository.editingItem {
+                        ItemEditorView(repository: repository, mode: .edit(item), startAsFavorite: false)
+                    } else {
+                        ItemEditorView(repository: repository, mode: .create, startAsFavorite: repository.newItemStartAsFavorite)
+                    }
+                }
             }
         }
-        .sheet(isPresented: $repository.isEditorPresented) {
-            if let item = repository.editingItem {
-                ItemEditorView(repository: repository, mode: .edit(item), startAsFavorite: false)
-            } else {
-                ItemEditorView(repository: repository, mode: .create, startAsFavorite: repository.newItemStartAsFavorite)
+        .task {
+            do {
+                try await repository.initializeVault()
+                await repository.loadSampleData()
+                isInitializing = false
+            } catch {
+                isInitializing = false
             }
         }
     }

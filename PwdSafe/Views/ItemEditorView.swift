@@ -14,6 +14,7 @@ struct ItemEditorView: View {
     @State private var notePreview: String = ""
     @State private var selectedGroupID: UUID?
     @State private var selectedTagIDs: [UUID] = []
+    @State private var isSaving: Bool = false
 
     enum EditorMode {
         case create
@@ -71,7 +72,7 @@ struct ItemEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") { save() }
-                        .disabled(title.isEmpty)
+                        .disabled(title.isEmpty || isSaving)
                 }
             }
         }
@@ -98,30 +99,39 @@ struct ItemEditorView: View {
     }
 
     private func save() {
-        switch mode {
-        case .create:
-            let draft = VaultItemDraft(
-                title: title,
-                website: website.isEmpty ? nil : website,
-                username: username.isEmpty ? nil : username,
-                notePreview: notePreview.isEmpty ? nil : notePreview,
-                isFavorite: startAsFavorite,
-                groupID: selectedGroupID,
-                tagIDs: selectedTagIDs
-            )
-            repository.createItem(draft)
-        case .edit(let item):
-            let mutation = VaultItemMutation(
-                title: title,
-                website: website.isEmpty ? nil : website,
-                username: username.isEmpty ? nil : username,
-                notePreview: notePreview.isEmpty ? nil : notePreview,
-                groupID: selectedGroupID,
-                tagIDs: selectedTagIDs
-            )
-            repository.updateItem(id: item.id, mutation: mutation)
+        isSaving = true
+        Task {
+            do {
+                switch mode {
+                case .create:
+                    let draft = VaultItemDraft(
+                        title: title,
+                        website: website.isEmpty ? nil : website,
+                        username: username.isEmpty ? nil : username,
+                        password: password,
+                        notePreview: notePreview.isEmpty ? nil : notePreview,
+                        isFavorite: startAsFavorite,
+                        groupID: selectedGroupID,
+                        tagIDs: selectedTagIDs
+                    )
+                    try await repository.createItem(draft)
+                case .edit(let item):
+                    let mutation = VaultItemMutation(
+                        title: title,
+                        website: website.isEmpty ? nil : website,
+                        username: username.isEmpty ? nil : username,
+                        password: password.isEmpty ? nil : password,
+                        notePreview: notePreview.isEmpty ? nil : notePreview,
+                        groupID: selectedGroupID,
+                        tagIDs: selectedTagIDs
+                    )
+                    try await repository.updateItem(id: item.id, mutation: mutation)
+                }
+                dismiss()
+            } catch {
+                isSaving = false
+            }
         }
-        dismiss()
     }
 }
 

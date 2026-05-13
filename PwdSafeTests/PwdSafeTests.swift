@@ -3,13 +3,22 @@ import Foundation
 @testable import PwdSafe
 
 @MainActor
+@Suite(.serialized)
 struct VaultRepositoryTests {
 
     var repository: VaultRepository!
 
-    init() {
-        repository = VaultRepository()
-        repository.loadSampleData()
+    init() async {
+        let mockAuth = MockAuthService()
+        let mockKeychain = MockKeychainStore()
+        let crypto = AESCryptoService()
+        repository = VaultRepository(
+            authService: mockAuth,
+            cryptoService: crypto,
+            keychainStore: mockKeychain
+        )
+        try? await repository.initializeVault()
+        await repository.loadSampleData()
     }
 
     @Test func testLoadSampleData() {
@@ -54,17 +63,18 @@ struct VaultRepositoryTests {
         }
     }
 
-    @Test func testCreateItem() {
+    @Test mutating func testCreateItem() async throws {
         let count = repository.allItems.count
         let draft = VaultItemDraft(
             title: "测试网站",
             website: "https://test.com",
             username: "testuser",
+            password: "TestP@ss123",
             notePreview: "测试备注",
             groupID: repository.groups.first?.id,
             tagIDs: [repository.tags.first!.id]
         )
-        repository.createItem(draft)
+        try await repository.createItem(draft)
 
         #expect(repository.allItems.count == count + 1)
         let newItem = repository.selectedItem()
@@ -80,7 +90,7 @@ struct VaultRepositoryTests {
         #expect(!newItem!.secretRef.isEmpty)
     }
 
-    @Test func testUpdateItem() {
+    @Test mutating func testUpdateItem() async throws {
         guard let item = repository.allItems.first else {
             #expect(Bool(false), "No items found")
             return
@@ -93,7 +103,7 @@ struct VaultRepositoryTests {
             username: "updateduser",
             notePreview: "更新后的备注"
         )
-        repository.updateItem(id: item.id, mutation: mutation)
+        try await repository.updateItem(id: item.id, mutation: mutation)
 
         #expect(item.title == "更新后的标题")
         #expect(item.website == "https://updated.com")
@@ -141,7 +151,7 @@ struct VaultRepositoryTests {
         let itemID = trashedItem.id
         let trashedCount = repository.trashedItems.count
 
-        repository.permanentlyDelete(ids: [itemID])
+        repository.permanentlyDeleteWithoutAuth(ids: [itemID])
 
         #expect(repository.trashedItems.count == trashedCount - 1)
         #expect(!repository.items.contains(where: { $0.id == itemID }))
@@ -152,7 +162,7 @@ struct VaultRepositoryTests {
         let trashedItem = repository.trashedItems.first!
         repository.selectItem(trashedItem.id)
 
-        repository.permanentlyDelete(ids: [trashedItem.id])
+        repository.permanentlyDeleteWithoutAuth(ids: [trashedItem.id])
 
         #expect(repository.selectedItemID == nil)
     }
@@ -280,20 +290,20 @@ struct VaultRepositoryTests {
         #expect(!repository.tags.contains(where: { $0.id == tagID }))
     }
 
-    @Test func testUpdateItemGroup() {
+    @Test mutating func testUpdateItemGroup() async throws {
         let item = repository.allItems.first!
         let newGroup = repository.groups.last!
 
-        repository.updateItem(id: item.id, mutation: VaultItemMutation(groupID: newGroup.id))
+        try await repository.updateItem(id: item.id, mutation: VaultItemMutation(groupID: newGroup.id))
 
         #expect(item.group?.id == newGroup.id)
     }
 
-    @Test func testUpdateItemTags() {
+    @Test mutating func testUpdateItemTags() async throws {
         let item = repository.allItems.first!
         let newTags = [repository.tags.first!.id]
 
-        repository.updateItem(id: item.id, mutation: VaultItemMutation(tagIDs: newTags))
+        try await repository.updateItem(id: item.id, mutation: VaultItemMutation(tagIDs: newTags))
 
         #expect(item.tags.count == 1)
         #expect(item.tags.first?.id == repository.tags.first!.id)
@@ -329,7 +339,7 @@ struct VaultRepositoryTests {
         let ids = items.map(\.id)
         repository.moveToTrash(ids: ids)
 
-        repository.permanentlyDelete(ids: ids)
+        repository.permanentlyDeleteWithoutAuth(ids: ids)
 
         for id in ids {
             #expect(!repository.items.contains(where: { $0.id == id }))

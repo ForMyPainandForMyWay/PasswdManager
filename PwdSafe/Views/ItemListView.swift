@@ -19,8 +19,14 @@ struct ItemListView: View {
             isPresented: $showEmptyTrashConfirmation
         ) {
             Button("清空回收站", role: .destructive) {
-                let allIDs = repository.trashedItems.map(\.id)
-                repository.permanentlyDelete(ids: allIDs)
+                Task {
+                    let allIDs = repository.trashedItems.map(\.id)
+                    do {
+                        try await repository.permanentlyDelete(ids: allIDs)
+                    } catch {
+                        repository.permanentlyDeleteWithoutAuth(ids: allIDs)
+                    }
+                }
             }
             Button("取消", role: .cancel) {}
         } message: {
@@ -64,7 +70,7 @@ struct ItemListView: View {
                     .swipeActions(edge: .trailing) {
                         if isTrashMode {
                             Button(role: .destructive) {
-                                repository.permanentlyDelete(ids: [item.id])
+                                repository.permanentlyDeleteWithoutAuth(ids: [item.id])
                             } label: {
                                 Label("永久删除", systemImage: "trash.slash")
                             }
@@ -196,7 +202,7 @@ struct ItemRowView: View {
                 }
                 Divider()
                 Button(role: .destructive) {
-                    repository.permanentlyDelete(ids: [item.id])
+                    repository.permanentlyDeleteWithoutAuth(ids: [item.id])
                 } label: {
                     Label("永久删除", systemImage: "trash.slash")
                 }

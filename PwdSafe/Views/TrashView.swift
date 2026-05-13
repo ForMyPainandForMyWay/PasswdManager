@@ -63,9 +63,15 @@ struct TrashView: View {
                 isPresented: $showDeleteConfirmation
             ) {
                 Button("永久删除", role: .destructive) {
-                    repository.permanentlyDelete(ids: pendingDeleteIDs)
-                    selectedIDs.removeAll()
-                    pendingDeleteIDs = []
+                    Task {
+                        do {
+                            try await repository.permanentlyDelete(ids: pendingDeleteIDs)
+                        } catch {
+                            repository.permanentlyDeleteWithoutAuth(ids: pendingDeleteIDs)
+                        }
+                        selectedIDs.removeAll()
+                        pendingDeleteIDs = []
+                    }
                 }
                 Button("取消", role: .cancel) {
                     pendingDeleteIDs = []
@@ -123,7 +129,7 @@ struct TrashView: View {
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            repository.permanentlyDelete(ids: [item.id])
+                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
                             selectedIDs.remove(item.id)
                         } label: {
                             Label("永久删除", systemImage: "trash.slash")
