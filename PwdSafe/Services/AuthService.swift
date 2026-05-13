@@ -41,6 +41,18 @@ final class LAAuthService: AuthService, @unchecked Sendable {
         state.withLock { $0.viewSecretExpiry.map { Date() < $0 } ?? false }
     }
 
+    func registerSuccessfulAuthentication(scope: AuthScope) {
+        let newExpiry = scope.sessionDuration > 0
+            ? Date().addingTimeInterval(scope.sessionDuration)
+            : nil
+        state.withLock {
+            switch scope {
+            case .viewSecret: $0.viewSecretExpiry = newExpiry
+            case .destructive: $0.destructiveExpiry = newExpiry
+            }
+        }
+    }
+
     func canAuthenticate() -> Bool {
         let context = LAContext()
         var error: NSError?
@@ -68,15 +80,7 @@ final class LAAuthService: AuthService, @unchecked Sendable {
                 localizedReason: reason
             )
             if success {
-                let newExpiry = scope.sessionDuration > 0
-                    ? Date().addingTimeInterval(scope.sessionDuration)
-                    : nil
-                state.withLock {
-                    switch scope {
-                    case .viewSecret: $0.viewSecretExpiry = newExpiry
-                    case .destructive: $0.destructiveExpiry = newExpiry
-                    }
-                }
+                registerSuccessfulAuthentication(scope: scope)
             } else {
                 throw AuthError.failed
             }

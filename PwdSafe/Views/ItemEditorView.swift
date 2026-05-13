@@ -169,7 +169,7 @@ private struct TagRowView: View {
             Image(systemName: "tag.fill")
                 .foregroundStyle(tagColor)
             Text(tag.name)
-                .foregroundStyle(tagColor)
+                .foregroundStyle(.primary)
             Spacer()
             if isSelected {
                 Image(systemName: "checkmark")

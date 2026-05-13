@@ -31,6 +31,7 @@ struct BackupGroup: Codable, Sendable {
     var id: UUID
     var name: String
     var colorHex: String?
+    var colorHexes: [String]?
     var sortOrder: Int
     var createdAt: Date
     var updatedAt: Date
@@ -40,6 +41,7 @@ struct BackupTag: Codable, Sendable {
     var id: UUID
     var name: String
     var colorHex: String?
+    var colorHexes: [String]?
     var createdAt: Date
     var updatedAt: Date
 }
@@ -95,6 +97,7 @@ struct BackupService: Sendable {
                 id: group.id,
                 name: group.name,
                 colorHex: group.colorHex,
+                colorHexes: group.colorHexes,
                 sortOrder: group.sortOrder,
                 createdAt: group.createdAt,
                 updatedAt: group.updatedAt
@@ -106,6 +109,7 @@ struct BackupService: Sendable {
                 id: tag.id,
                 name: tag.name,
                 colorHex: tag.colorHex,
+                colorHexes: tag.colorHexes,
                 createdAt: tag.createdAt,
                 updatedAt: tag.updatedAt
             )
@@ -148,14 +152,29 @@ struct BackupService: Sendable {
         let existingGroupIDs = Set(repository.groups.map(\.id))
         for group in record.groups {
             if !existingGroupIDs.contains(group.id) {
-                repository.createGroup(name: group.name, colorHex: group.colorHex)
+                repository.appendGroup(VaultGroup(
+                    id: group.id,
+                    name: group.name,
+                    colorHex: group.colorHex,
+                    colorHexes: group.colorHexes,
+                    sortOrder: group.sortOrder,
+                    createdAt: group.createdAt,
+                    updatedAt: group.updatedAt
+                ))
             }
         }
 
         let existingTagIDs = Set(repository.tags.map(\.id))
         for tag in record.tags {
             if !existingTagIDs.contains(tag.id) {
-                repository.createTag(name: tag.name, colorHex: tag.colorHex)
+                repository.appendTag(VaultTag(
+                    id: tag.id,
+                    name: tag.name,
+                    colorHex: tag.colorHex,
+                    colorHexes: tag.colorHexes,
+                    createdAt: tag.createdAt,
+                    updatedAt: tag.updatedAt
+                ))
             }
         }
 
@@ -163,6 +182,25 @@ struct BackupService: Sendable {
         let tagMap = Dictionary(uniqueKeysWithValues: repository.tags.map { ($0.id, $0) })
 
         for backupItem in record.items {
+            if let existing = repository.items.first(where: { $0.id == backupItem.id }) {
+                if existing.isDeleted {
+                    existing.isDeleted = false
+                    existing.deletedAt = nil
+                    existing.title = backupItem.title
+                    existing.website = backupItem.website
+                    existing.username = backupItem.username
+                    existing.email = backupItem.email
+                    existing.phone = backupItem.phone
+                    existing.notePreview = backupItem.notePreview
+                    existing.isFavorite = backupItem.isFavorite
+                    existing.createdAt = backupItem.createdAt
+                    existing.updatedAt = backupItem.updatedAt
+                    existing.group = backupItem.groupID.flatMap { groupMap[$0] }
+                    existing.tags = backupItem.tagIDs.compactMap { tagMap[$0] }
+                }
+                continue
+            }
+
             let secretRef = UUID().uuidString
             let encryptedData = try JSONEncoder().encode(backupItem.encryptedSecret)
             repository.storeSecretData(encryptedData, for: secretRef)

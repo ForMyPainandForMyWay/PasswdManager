@@ -6,6 +6,10 @@ struct ItemDetailView: View {
     @State private var revealedPassword: String?
     @State private var isRevealing: Bool = false
     @State private var revealError: String?
+    @State private var copiedField: String?
+    @State private var hoveredField: String?
+    @State private var enlargedText: String?
+    @State private var showEnlarged: Bool = false
 
     var body: some View {
         if let item = repository.selectedItem() {
@@ -41,12 +45,30 @@ struct ItemDetailView: View {
             }
             .padding(24)
         }
-        .safeAreaInset(edge: .bottom) {
-            detailToolbar(for: item)
-        }
         .onChange(of: item.id) { _, _ in
             revealedPassword = nil
             revealError = nil
+        }
+        .sheet(isPresented: $showEnlarged) {
+            if let text = enlargedText {
+                VStack(spacing: 16) {
+                    ScrollView {
+                        Text(text)
+                            .font(.system(.title3, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding(24)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("关闭") { showEnlarged = false }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+                }
+                .frame(width: 480, height: 320)
+            }
         }
     }
 
@@ -54,7 +76,7 @@ struct ItemDetailView: View {
         HStack(spacing: 16) {
             Image(systemName: item.isDeleted ? "trash.fill" : (item.isFavorite ? "star.fill" : "key.fill"))
                 .font(.largeTitle)
-                .foregroundStyle(item.isDeleted ? Color.secondary : (item.isFavorite ? Color.yellow : Color.accentColor))
+                .foregroundStyle(item.isDeleted ? Color.secondary : (item.isFavorite ? Color.yellow : (Color(hex: item.group?.colorHex) ?? Color.secondary)))
                 .frame(width: 56, height: 56)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
 
@@ -86,29 +108,33 @@ struct ItemDetailView: View {
     }
 
     private func fieldSection(for item: VaultItem) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 0) {
             if let username = item.username, !username.isEmpty {
-                detailFieldRow(label: "用户名", value: username, systemImage: "person.fill") {
+                interactiveFieldRow(icon: "person.fill", label: "用户名", value: username, fieldKey: "username") {
                     repository.copyUsername(id: item.id)
                 }
             }
 
             if let email = item.email, !email.isEmpty {
-                detailFieldRow(label: "邮箱", value: email, systemImage: "envelope") {
+                if hasPreviousField(item, before: "email") { Divider().padding(.vertical, 8) }
+                interactiveFieldRow(icon: "envelope", label: "邮箱", value: email, fieldKey: "email") {
                     repository.copyEmail(id: item.id)
                 }
             }
 
             if let phone = item.phone, !phone.isEmpty {
-                detailFieldRow(label: "手机", value: phone, systemImage: "phone") {
+                if hasPreviousField(item, before: "phone") { Divider().padding(.vertical, 8) }
+                interactiveFieldRow(icon: "phone", label: "手机", value: phone, fieldKey: "phone") {
                     repository.copyPhone(id: item.id)
                 }
             }
 
+            if hasPreviousField(item, before: "password") { Divider().padding(.vertical, 8) }
+
             if item.isDeleted {
-                detailFieldRow(label: "密码", value: "已删除", systemImage: "lock.fill") {}
+                interactiveFieldRow(icon: "lock.fill", label: "密码", value: "已删除", fieldKey: "password_deleted") {}
             } else if let revealed = revealedPassword {
-                detailFieldRow(label: "密码", value: revealed, systemImage: "lock.open.fill") {
+                interactiveFieldRow(icon: "lock.open.fill", label: "密码", value: revealed, fieldKey: "password") {
                     Task { await copyPassword(item) }
                 }
             } else {
@@ -139,28 +165,28 @@ struct ItemDetailView: View {
                             .foregroundStyle(.red)
                     }
                 }
-                .padding(12)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
             }
 
             if let notePreview = item.notePreview, !notePreview.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                Divider().padding(.vertical, 8)
+                HStack(spacing: 8) {
                     Label("备注", systemImage: "note.text")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Spacer()
                     Text(notePreview)
                         .font(.body)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                        .lineLimit(2)
                 }
             }
 
             if !item.tags.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                Divider().padding(.vertical, 8)
+                HStack(spacing: 8) {
                     Label("标签", systemImage: "tag.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Spacer()
                     HStack(spacing: 6) {
                         ForEach(item.tags) { tag in
                             Text(tag.name)
@@ -176,6 +202,103 @@ struct ItemDetailView: View {
                     }
                 }
             }
+        }
+        .padding(12)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        .onHover { hovering in
+            if !hovering {
+                revealedPassword = nil
+            }
+        }
+    }
+
+    private func interactiveFieldRow(icon: String, label: String, value: String, fieldKey: String, copyAction: @escaping () -> Void) -> some View {
+        let isCopied = copiedField == fieldKey
+        let isHovered = hoveredField == fieldKey
+
+        return HStack(spacing: 8) {
+            Label(label, systemImage: icon)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            ZStack {
+                Text(value)
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .opacity(isCopied ? 0 : 1)
+                    .scaleEffect(isCopied ? 0.8 : 1.0)
+                Text("已拷贝")
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .opacity(isCopied ? 1 : 0)
+                    .scaleEffect(isCopied ? 1.0 : 0.8)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                isHovered ? Color.secondary.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .animation(.easeInOut(duration: 0.25), value: isCopied)
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { hovering in
+                hoveredField = hovering ? fieldKey : nil
+            }
+            .onTapGesture {
+                copyAction()
+                copiedField = fieldKey
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    if copiedField == fieldKey {
+                        copiedField = nil
+                    }
+                }
+            }
+            .contextMenu {
+                Button {
+                    copyAction()
+                    copiedField = fieldKey
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        if copiedField == fieldKey {
+                            copiedField = nil
+                        }
+                    }
+                } label: {
+                    Label("复制内容", systemImage: "doc.on.doc")
+                }
+                Button {
+                    enlargedText = value
+                    showEnlarged = true
+                } label: {
+                    Label("放大显示", systemImage: "text.magnifyingglass")
+                }
+            }
+            Button {
+                copyAction()
+                copiedField = fieldKey
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    if copiedField == fieldKey {
+                        copiedField = nil
+                    }
+                }
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.callout)
+            }
+            .buttonStyle(.plain)
+            .help("复制\(label)")
+        }
+    }
+
+    private func hasPreviousField(_ item: VaultItem, before field: String) -> Bool {
+        switch field {
+        case "email":
+            return (item.username?.isEmpty == false)
+        case "phone":
+            return (item.username?.isEmpty == false) || (item.email?.isEmpty == false)
+        case "password":
+            return (item.username?.isEmpty == false) || (item.email?.isEmpty == false) || (item.phone?.isEmpty == false)
+        default:
+            return false
         }
     }
 
@@ -214,57 +337,6 @@ struct ItemDetailView: View {
         }
     }
 
-    private func detailFieldRow(label: String, value: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(label, systemImage: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Text(value)
-                    .font(.body.monospaced())
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    action()
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.callout)
-                }
-                .buttonStyle(.plain)
-                .help("复制\(label)")
-            }
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-
-    private func detailToolbar(for item: VaultItem) -> some View {
-        HStack {
-            if item.isDeleted {
-                Button(role: .destructive) {
-                    Task { await deleteFromTrash(item) }
-                } label: {
-                    Label("永久删除", systemImage: "trash.slash")
-                        .labelStyle(.iconOnly)
-                }
-                .help("永久删除")
-            } else {
-                Button(role: .destructive) {
-                    repository.moveToTrash(ids: [item.id])
-                } label: {
-                    Label("移到回收站", systemImage: "trash")
-                        .labelStyle(.iconOnly)
-                }
-                .help("移到回收站")
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .background(.bar)
-    }
-
     private func revealPassword(_ item: VaultItem) async {
         isRevealing = true
         revealError = nil
@@ -287,14 +359,5 @@ struct ItemDetailView: View {
         do {
             try await repository.copyPassword(id: item.id)
         } catch {}
-    }
-
-    private func deleteFromTrash(_ item: VaultItem) async {
-        do {
-            try await repository.permanentlyDelete(ids: [item.id])
-        } catch AuthError.cancelled {
-        } catch {
-            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
-        }
     }
 }

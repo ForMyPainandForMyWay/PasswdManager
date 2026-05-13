@@ -4,8 +4,6 @@ struct ItemListView: View {
     @Bindable var repository: VaultRepository
     let selectedNavigation: NavigationItem
 
-    @State private var showEmptyTrashConfirmation: Bool = false
-
     var body: some View {
         VStack(spacing: 0) {
             searchBar
@@ -13,25 +11,6 @@ struct ItemListView: View {
         }
         .safeAreaInset(edge: .bottom) {
             bottomToolbar
-        }
-        .confirmationDialog(
-            "清空回收站",
-            isPresented: $showEmptyTrashConfirmation
-        ) {
-            Button("清空回收站", role: .destructive) {
-                Task {
-                    let allIDs = repository.trashedItems.map(\.id)
-                    do {
-                        try await repository.permanentlyDelete(ids: allIDs)
-                    } catch AuthError.cancelled {
-                    } catch {
-                        repository.permanentlyDeleteWithoutAuth(ids: allIDs)
-                    }
-                }
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("回收站中的所有项目将被永久删除，此操作不可撤销。")
         }
     }
 
@@ -80,7 +59,7 @@ struct ItemListView: View {
                                         }
                                     }
                                 } label: {
-                                    Label("永久删除", systemImage: "trash.slash")
+                                    Label("永久删除", systemImage: "trash")
                                 }
                         } else {
                             Button(role: .destructive) {
@@ -137,15 +116,6 @@ struct ItemListView: View {
 
     private var bottomToolbar: some View {
         HStack {
-            if isTrashMode {
-                Button(role: .destructive) {
-                    showEmptyTrashConfirmation = true
-                } label: {
-                    Image(systemName: "xmark.bin")
-                }
-                .help("清空回收站")
-            }
-
             Spacer()
 
             Text("\(displayedItems.count) 个项目")
@@ -166,7 +136,7 @@ struct ItemRowView: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: isTrashMode ? "trash.fill" : (item.isFavorite ? "star.fill" : "key.fill"))
-                .foregroundStyle(isTrashMode ? Color.secondary : (item.isFavorite ? Color.yellow : Color.accentColor))
+                .foregroundStyle(isTrashMode ? Color.secondary : (item.isFavorite ? Color.yellow : (Color(hex: item.group?.colorHex) ?? Color.secondary)))
                 .frame(width: 28, height: 28)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
 
@@ -210,7 +180,7 @@ struct ItemRowView: View {
                                         }
                                     }
                                 } label: {
-                                    Label("永久删除", systemImage: "trash.slash")
+                                    Label("永久删除", systemImage: "trash")
                                 }
                             } else {
                 Button {

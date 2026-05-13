@@ -36,6 +36,7 @@ private struct PersistedGroup: Codable {
     var id: UUID
     var name: String
     var colorHex: String?
+    var colorHexes: [String]?
     var sortOrder: Int
     var createdAt: Date
     var updatedAt: Date
@@ -45,6 +46,7 @@ private struct PersistedTag: Codable {
     var id: UUID
     var name: String
     var colorHex: String?
+    var colorHexes: [String]?
     var createdAt: Date
     var updatedAt: Date
 }
@@ -275,6 +277,9 @@ final class VaultRepository {
             guard let item = items.first(where: { $0.id == id }) else { continue }
             item.isDeleted = false
             item.deletedAt = nil
+            if selectedItemID == id {
+                selectedItemID = nil
+            }
         }
         saveMetadata()
     }
@@ -317,16 +322,17 @@ final class VaultRepository {
         saveMetadata()
     }
 
-    func createGroup(name: String, colorHex: String? = nil) {
-        let group = VaultGroup(name: name, colorHex: colorHex, sortOrder: groups.count)
+    func createGroup(name: String, colorHex: String? = nil, colorHexes: [String]? = nil) {
+        let group = VaultGroup(name: name, colorHex: colorHex, colorHexes: colorHexes, sortOrder: groups.count)
         groups.append(group)
         saveMetadata()
     }
 
-    func updateGroup(id: UUID, name: String? = nil, colorHex: String? = nil) {
+    func updateGroup(id: UUID, name: String? = nil, colorHex: String? = nil, colorHexes: [String]? = nil) {
         guard let group = groups.first(where: { $0.id == id }) else { return }
         if let name = name { group.name = name }
         if let colorHex = colorHex { group.colorHex = colorHex }
+        if let colorHexes = colorHexes { group.colorHexes = colorHexes }
         group.updatedAt = Date()
         saveMetadata()
     }
@@ -336,16 +342,17 @@ final class VaultRepository {
         saveMetadata()
     }
 
-    func createTag(name: String, colorHex: String? = nil) {
-        let tag = VaultTag(name: name, colorHex: colorHex)
+    func createTag(name: String, colorHex: String? = nil, colorHexes: [String]? = nil) {
+        let tag = VaultTag(name: name, colorHex: colorHex, colorHexes: colorHexes)
         tags.append(tag)
         saveMetadata()
     }
 
-    func updateTag(id: UUID, name: String? = nil, colorHex: String? = nil) {
+    func updateTag(id: UUID, name: String? = nil, colorHex: String? = nil, colorHexes: [String]? = nil) {
         guard let tag = tags.first(where: { $0.id == id }) else { return }
         if let name = name { tag.name = name }
         if let colorHex = colorHex { tag.colorHex = colorHex }
+        if let colorHexes = colorHexes { tag.colorHexes = colorHexes }
         tag.updatedAt = Date()
         saveMetadata()
     }
@@ -433,6 +440,18 @@ final class VaultRepository {
         items.append(item)
     }
 
+    func appendGroup(_ group: VaultGroup) {
+        if !groups.contains(where: { $0.id == group.id }) {
+            groups.append(group)
+        }
+    }
+
+    func appendTag(_ tag: VaultTag) {
+        if !tags.contains(where: { $0.id == tag.id }) {
+            tags.append(tag)
+        }
+    }
+
     func exportBackup() async throws -> BackupRecord {
         try await authService.authenticate(reason: "导出加密备份", scope: .destructive)
         return try BackupService.exportBackup(
@@ -469,6 +488,13 @@ final class VaultRepository {
         } catch {
             return false
         }
+    }
+
+    func unlockAfterSuccessfulEmbeddedAuthentication() {
+        if let auth = authService as? LAAuthService {
+            auth.registerSuccessfulAuthentication(scope: .viewSecret)
+        }
+        isLocked = false
     }
 
     private var dataDirectory: URL {
@@ -534,6 +560,7 @@ final class VaultRepository {
                 id: group.id,
                 name: group.name,
                 colorHex: group.colorHex,
+                colorHexes: group.colorHexes,
                 sortOrder: group.sortOrder,
                 createdAt: group.createdAt,
                 updatedAt: group.updatedAt
@@ -545,6 +572,7 @@ final class VaultRepository {
                 id: tag.id,
                 name: tag.name,
                 colorHex: tag.colorHex,
+                colorHexes: tag.colorHexes,
                 createdAt: tag.createdAt,
                 updatedAt: tag.updatedAt
             )
@@ -563,10 +591,10 @@ final class VaultRepository {
         }
 
         let loadedGroups = persisted.groups.map { pg in
-            VaultGroup(id: pg.id, name: pg.name, colorHex: pg.colorHex, sortOrder: pg.sortOrder, createdAt: pg.createdAt, updatedAt: pg.updatedAt)
+            VaultGroup(id: pg.id, name: pg.name, colorHex: pg.colorHex, colorHexes: pg.colorHexes, sortOrder: pg.sortOrder, createdAt: pg.createdAt, updatedAt: pg.updatedAt)
         }
         let loadedTags = persisted.tags.map { pt in
-            VaultTag(id: pt.id, name: pt.name, colorHex: pt.colorHex, createdAt: pt.createdAt, updatedAt: pt.updatedAt)
+            VaultTag(id: pt.id, name: pt.name, colorHex: pt.colorHex, colorHexes: pt.colorHexes, createdAt: pt.createdAt, updatedAt: pt.updatedAt)
         }
 
         let groupMap = Dictionary(uniqueKeysWithValues: loadedGroups.map { ($0.id, $0) })

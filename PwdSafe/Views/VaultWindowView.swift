@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import LocalAuthentication
 
 enum NavigationItem: Hashable, Identifiable {
     case allItems
@@ -83,10 +84,45 @@ struct VaultWindowView: View {
     @State private var showImportError: Bool = false
     @State private var backupDocument: BackupDocument?
     @State private var isExporting: Bool = false
+    @State private var showEmptyTrashConfirmation: Bool = false
+    @State private var showMoveAllToTrashConfirmation: Bool = false
+    @State private var lastActiveDate: Date = .distantPast
+    @State private var authErrorMessage: String?
+    @State private var authContext: LAContext = LAContext()
+    @State private var authAttemptID: UUID = UUID()
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("autoLockTimeout") private var autoLockTimeout: Int = AutoLockTimeout.minute5.rawValue
+
+    private var autoLockSeconds: TimeInterval {
+        TimeInterval(autoLockTimeout * 60)
+    }
 
     private var isTrashMode: Bool {
         if case .trash = selectedNavigation { return true }
         return false
+    }
+
+    private var displayedItemIDs: [UUID] {
+        switch selectedNavigation {
+        case .allItems:
+            return repository.filteredItems.map(\.id)
+        case .favorites:
+            return repository.favoriteItems.filter { item in
+                repository.searchQuery.isEmpty || repository.filteredItems.contains(where: { $0.id == item.id })
+            }.map(\.id)
+        case .trash:
+            return []
+        case .group(let groupID):
+            guard let group = repository.groups.first(where: { $0.id == groupID }) else { return [] }
+            let items = repository.items(for: group)
+            if repository.searchQuery.isEmpty { return items.map(\.id) }
+            return items.filter { item in repository.filteredItems.contains(where: { $0.id == item.id }) }.map(\.id)
+        case .tag(let tagID):
+            guard let tag = repository.tags.first(where: { $0.id == tagID }) else { return [] }
+            let items = repository.items(for: tag)
+            if repository.searchQuery.isEmpty { return items.map(\.id) }
+            return items.filter { item in repository.filteredItems.contains(where: { $0.id == item.id }) }.map(\.id)
+        }
     }
 
     var body: some View {
@@ -100,6 +136,8 @@ struct VaultWindowView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(width: 960, height: 640)
+            } else if repository.isLocked {
+                lockScreen
             } else {
                 NavigationSplitView {
                     SidebarView(
@@ -116,6 +154,75 @@ struct VaultWindowView: View {
                 } detail: {
                     ItemDetailView(repository: repository)
                         .toolbar {
+                            ToolbarItem {
+                                if !isTrashMode {
+                                    Button {
+                                        repository.editingItem = nil
+                                        repository.newItemStartAsFavorite = false
+                                        repository.isEditorPresented = true
+                                    } label: {
+                                        Image(systemName: "plus")
+                                    }
+                                    .help("新建密码条目")
+                                }
+                            }
+                            ToolbarItem {
+                                if !isTrashMode, let item = repository.selectedItem(), !item.isDeleted {
+                                    Button {
+                                        Task { await editItem(item) }
+                                    } label: {
+                                        Image(systemName: "pencil")
+                                    }
+                                    .help("编辑")
+                                }
+                            }
+                            ToolbarItem {
+                                if isTrashMode, let item = repository.selectedItem() {
+                                    Button {
+                                        repository.restoreFromTrash(ids: [item.id])
+                                    } label: {
+                                        Image(systemName: "arrow.uturn.backward")
+                                    }
+                                    .help("恢复")
+                                }
+                            }
+                            ToolbarItem {
+                                if isTrashMode, let item = repository.selectedItem() {
+                                    Button(role: .destructive) {
+                                        Task { await deleteFromTrash(item) }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .help("永久删除")
+                                }
+                            }
+                            ToolbarItem {
+                                if isTrashMode {
+                                    Button(role: .destructive) {
+                                        showEmptyTrashConfirmation = true
+                                    } label: {
+                                        Image(systemName: "xmark.bin")
+                                    }
+                                    .help("清空回收站")
+                                } else if let item = repository.selectedItem(), !item.isDeleted {
+                                    Button(role: .destructive) {
+                                        repository.moveToTrash(ids: [item.id])
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .help("移到回收站")
+                                }
+                            }
+                            ToolbarItem {
+                                if !isTrashMode {
+                                    Button(role: .destructive) {
+                                        showMoveAllToTrashConfirmation = true
+                                    } label: {
+                                        Image(systemName: "xmark.bin")
+                                    }
+                                    .help("清空条目到回收站")
+                                }
+                            }
                             ToolbarItem {
                                 Menu {
                                     Button {
@@ -140,29 +247,6 @@ struct VaultWindowView: View {
                                 }
                                 .menuIndicator(.hidden)
                                 .help("更多操作")
-                            }
-                            ToolbarItem {
-                                if !isTrashMode, let item = repository.selectedItem(), !item.isDeleted {
-                                    Button {
-                                        repository.editingItem = item
-                                        repository.isEditorPresented = true
-                                    } label: {
-                                        Image(systemName: "pencil")
-                                    }
-                                    .help("编辑")
-                                }
-                            }
-                            ToolbarItem {
-                                if !isTrashMode {
-                                    Button {
-                                        repository.editingItem = nil
-                                        repository.newItemStartAsFavorite = false
-                                        repository.isEditorPresented = true
-                                    } label: {
-                                        Image(systemName: "plus.circle")
-                                    }
-                                    .help("新建密码条目")
-                                }
                             }
                         }
                 }
@@ -219,6 +303,51 @@ struct VaultWindowView: View {
                 } message: {
                     Text(importError ?? "未知错误")
                 }
+                .confirmationDialog(
+                    "清空回收站",
+                    isPresented: $showEmptyTrashConfirmation
+                ) {
+                    Button("清空回收站", role: .destructive) {
+                        Task {
+                            let allIDs = repository.trashedItems.map(\.id)
+                            do {
+                                try await repository.permanentlyDelete(ids: allIDs)
+                            } catch AuthError.cancelled {
+                            } catch {
+                                repository.permanentlyDeleteWithoutAuth(ids: allIDs)
+                            }
+                        }
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("回收站中的所有项目将被永久删除，此操作不可撤销。")
+                }
+                .confirmationDialog(
+                    "清空条目到回收站",
+                    isPresented: $showMoveAllToTrashConfirmation
+                ) {
+                    Button("移入回收站", role: .destructive) {
+                        let ids = displayedItemIDs
+                        guard !ids.isEmpty else { return }
+                        repository.moveToTrash(ids: ids)
+                    }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("当前列表中的 \(displayedItemIDs.count) 个密码条目将被移入回收站。")
+                }
+            }
+        }
+        .onChange(of: selectedNavigation) { _, _ in
+            repository.selectItem(nil)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active && !repository.isLocked {
+                let now = Date()
+                if autoLockTimeout > 0 && now.timeIntervalSince(lastActiveDate) > autoLockSeconds {
+                    repository.lock()
+                }
+            } else if newPhase == .background || newPhase == .inactive {
+                lastActiveDate = Date()
             }
         }
         .task {
@@ -229,6 +358,53 @@ struct VaultWindowView: View {
             } catch {
                 isInitializing = false
             }
+        }
+    }
+
+    private var lockScreen: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.secondary)
+            Text("PwdSafe 已锁定")
+                .font(.title2)
+                .fontWeight(.semibold)
+            Text("需要认证以解锁保险库")
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Button {
+                Task { await unlockVault() }
+            } label: {
+                Text("点击解锁")
+                    .font(.headline)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .frame(width: 960, height: 640)
+    }
+
+    private func unlockVault() async {
+        if await repository.unlock() {
+            lastActiveDate = Date()
+        }
+    }
+
+    private func deleteFromTrash(_ item: VaultItem) async {
+        do {
+            try await repository.permanentlyDelete(ids: [item.id])
+        } catch AuthError.cancelled {
+        } catch {
+            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
+        }
+    }
+
+    private func editItem(_ item: VaultItem) async {
+        if await repository.unlock() {
+            repository.editingItem = item
+            repository.isEditorPresented = true
         }
     }
 
