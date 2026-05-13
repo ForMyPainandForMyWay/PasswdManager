@@ -10,11 +10,14 @@ struct ItemEditorView: View {
     @State private var title: String = ""
     @State private var website: String = ""
     @State private var username: String = ""
+    @State private var email: String = ""
+    @State private var phone: String = ""
     @State private var password: String = ""
     @State private var notePreview: String = ""
     @State private var selectedGroupID: UUID?
     @State private var selectedTagIDs: [UUID] = []
     @State private var isSaving: Bool = false
+    @State private var showPasswordGenerator: Bool = false
 
     enum EditorMode {
         case create
@@ -37,7 +40,18 @@ struct ItemEditorView: View {
                     TextField("标题", text: $title)
                     TextField("网址", text: $website)
                     TextField("用户名", text: $username)
-                    SecureField("密码", text: $password)
+                    TextField("邮箱地址", text: $email)
+                    TextField("手机号", text: $phone)
+                    HStack {
+                        SecureField("密码", text: $password)
+                        Button {
+                            showPasswordGenerator = true
+                        } label: {
+                            Image(systemName: "wand.and.stars")
+                        }
+                        .buttonStyle(.plain)
+                        .help("生成随机密码")
+                    }
                 }
 
                 Section("备注") {
@@ -48,7 +62,7 @@ struct ItemEditorView: View {
                 Section("分组") {
                     Picker("分组", selection: $selectedGroupID) {
                         Text("无分组").tag(nil as UUID?)
-                        ForEach(repository.groups) { group in
+                        ForEach(repository.groups, id: \.id) { group in
                             Text(group.name).tag(group.id as UUID?)
                         }
                     }
@@ -82,11 +96,16 @@ struct ItemEditorView: View {
                 title = item.title
                 website = item.website ?? ""
                 username = item.username ?? ""
+                email = item.email ?? ""
+                phone = item.phone ?? ""
                 password = ""
                 notePreview = item.notePreview ?? ""
                 selectedGroupID = item.group?.id
                 selectedTagIDs = item.tags.map(\.id)
             }
+        }
+        .sheet(isPresented: $showPasswordGenerator) {
+            PasswordGeneratorView(generatedPassword: $password)
         }
     }
 
@@ -108,6 +127,8 @@ struct ItemEditorView: View {
                         title: title,
                         website: website.isEmpty ? nil : website,
                         username: username.isEmpty ? nil : username,
+                        email: email.isEmpty ? nil : email,
+                        phone: phone.isEmpty ? nil : phone,
                         password: password,
                         notePreview: notePreview.isEmpty ? nil : notePreview,
                         isFavorite: startAsFavorite,
@@ -120,6 +141,8 @@ struct ItemEditorView: View {
                         title: title,
                         website: website.isEmpty ? nil : website,
                         username: username.isEmpty ? nil : username,
+                        email: email.isEmpty ? nil : email,
+                        phone: phone.isEmpty ? nil : phone,
                         password: password.isEmpty ? nil : password,
                         notePreview: notePreview.isEmpty ? nil : notePreview,
                         groupID: selectedGroupID,

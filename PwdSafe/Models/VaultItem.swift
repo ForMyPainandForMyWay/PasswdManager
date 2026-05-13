@@ -7,8 +7,9 @@ final class VaultItem {
     var title: String
     var website: String?
     var username: String?
+    var email: String?
+    var phone: String?
     var notePreview: String?
-    var iconName: String?
     var secretRef: String
     var isFavorite: Bool
     var isDeleted: Bool
@@ -28,8 +29,9 @@ final class VaultItem {
         title: String,
         website: String? = nil,
         username: String? = nil,
+        email: String? = nil,
+        phone: String? = nil,
         notePreview: String? = nil,
-        iconName: String? = nil,
         secretRef: String = "",
         isFavorite: Bool = false,
         isDeleted: Bool = false,
@@ -44,8 +46,9 @@ final class VaultItem {
         self.title = title
         self.website = website
         self.username = username
+        self.email = email
+        self.phone = phone
         self.notePreview = notePreview
-        self.iconName = iconName
         self.secretRef = secretRef
         self.isFavorite = isFavorite
         self.isDeleted = isDeleted

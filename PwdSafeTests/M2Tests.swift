@@ -205,22 +205,40 @@ struct EncryptedSecretTests {
 }
 
 final class MockAuthService: AuthService, @unchecked Sendable {
-    var isSessionValid: Bool = false
     var canAuth: Bool = true
     var shouldFail: Bool = false
     var authenticateCallCount: Int = 0
+    private var viewSecretValid: Bool = false
+    private var destructiveValid: Bool = false
 
-    func authenticate(reason: String) async throws {
-        if isSessionValid { return }
+    var isSessionValid: Bool { viewSecretValid }
+
+    func authenticate(reason: String, scope: AuthScope) async throws {
+        let isValid = scope == .viewSecret ? viewSecretValid : destructiveValid
+        if isValid { return }
         authenticateCallCount += 1
         if shouldFail {
             throw AuthError.failed
         }
-        isSessionValid = true
+        switch scope {
+        case .viewSecret: viewSecretValid = true
+        case .destructive: destructiveValid = true
+        }
     }
 
     func canAuthenticate() -> Bool { canAuth }
-    func invalidateSession() { isSessionValid = false }
+
+    func invalidateSession(scope: AuthScope) {
+        switch scope {
+        case .viewSecret: viewSecretValid = false
+        case .destructive: destructiveValid = false
+        }
+    }
+
+    func invalidateAllSessions() {
+        viewSecretValid = false
+        destructiveValid = false
+    }
 }
 
 final class MockKeychainStore: KeychainStore, @unchecked Sendable {

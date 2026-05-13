@@ -66,6 +66,7 @@ struct TrashView: View {
                     Task {
                         do {
                             try await repository.permanentlyDelete(ids: pendingDeleteIDs)
+                        } catch AuthError.cancelled {
                         } catch {
                             repository.permanentlyDeleteWithoutAuth(ids: pendingDeleteIDs)
                         }

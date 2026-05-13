@@ -1,6 +1,5 @@
 import Foundation
 import Security
-import LocalAuthentication
 
 enum KeychainError: Error {
     case saveFailed(OSStatus)
@@ -28,8 +27,7 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
         try deleteVaultKey()
         let status = saveGenericPassword(
             account: vaultKeyAccount,
-            data: key,
-            useAccessControl: true
+            data: key
         )
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
@@ -59,8 +57,7 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
         try deleteSecret(for: secretRef)
         let status = saveGenericPassword(
             account: secretRef,
-            data: data,
-            useAccessControl: false
+            data: data
         )
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
@@ -92,28 +89,14 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
         case error(OSStatus)
     }
 
-    private func saveGenericPassword(account: String, data: Data, useAccessControl: Bool) -> OSStatus {
-        var query: [String: Any] = [
+    private func saveGenericPassword(account: String, data: Data) -> OSStatus {
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
-
-        if useAccessControl {
-            guard let access = SecAccessControlCreateWithFlags(
-                kCFAllocatorDefault,
-                kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-                .biometryCurrentSet,
-                nil
-            ) else {
-                return errSecAuthFailed
-            }
-            query[kSecAttrAccessControl as String] = access
-            query[kSecUseAuthenticationContext as String] = LAContext()
-        }
-
         return SecItemAdd(query as CFDictionary, nil)
     }
 

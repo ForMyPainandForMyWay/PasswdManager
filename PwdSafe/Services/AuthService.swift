@@ -9,40 +9,56 @@ enum AuthError: Error {
     case notAuthenticated
 }
 
+enum AuthScope: Sendable {
+    case viewSecret
+    case destructive
+
+    var sessionDuration: TimeInterval {
+        switch self {
+        case .viewSecret: return 180
+        case .destructive: return 0
+        }
+    }
+}
+
 protocol AuthService: Sendable {
-    func authenticate(reason: String) async throws
+    func authenticate(reason: String, scope: AuthScope) async throws
     func canAuthenticate() -> Bool
-    func invalidateSession()
+    func invalidateSession(scope: AuthScope)
+    func invalidateAllSessions()
     var isSessionValid: Bool { get }
 }
 
 final class LAAuthService: AuthService, @unchecked Sendable {
-    private let context: LAContext
-    private let sessionDuration: TimeInterval
     private let state = OSAllocatedUnfairLock(initialState: SessionState())
 
     private struct SessionState {
-        var expiry: Date?
-    }
-
-    init(sessionDuration: TimeInterval = 300) {
-        self.context = LAContext()
-        self.sessionDuration = sessionDuration
+        var viewSecretExpiry: Date?
+        var destructiveExpiry: Date?
     }
 
     var isSessionValid: Bool {
-        state.withLock { $0.expiry.map { Date() < $0 } ?? false }
+        state.withLock { $0.viewSecretExpiry.map { Date() < $0 } ?? false }
     }
 
     func canAuthenticate() -> Bool {
+        let context = LAContext()
         var error: NSError?
         return context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
     }
 
-    func authenticate(reason: String) async throws {
-        if isSessionValid { return }
+    func authenticate(reason: String, scope: AuthScope = .viewSecret) async throws {
+        let expiry: Date? = state.withLock {
+            switch scope {
+            case .viewSecret: return $0.viewSecretExpiry
+            case .destructive: return $0.destructiveExpiry
+            }
+        }
 
-        guard canAuthenticate() else {
+        if let exp = expiry, Date() < exp { return }
+
+        let context = LAContext()
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {
             throw AuthError.unavailable
         }
 
@@ -52,7 +68,15 @@ final class LAAuthService: AuthService, @unchecked Sendable {
                 localizedReason: reason
             )
             if success {
-                state.withLock { $0.expiry = Date().addingTimeInterval(sessionDuration) }
+                let newExpiry = scope.sessionDuration > 0
+                    ? Date().addingTimeInterval(scope.sessionDuration)
+                    : nil
+                state.withLock {
+                    switch scope {
+                    case .viewSecret: $0.viewSecretExpiry = newExpiry
+                    case .destructive: $0.destructiveExpiry = newExpiry
+                    }
+                }
             } else {
                 throw AuthError.failed
             }
@@ -68,8 +92,19 @@ final class LAAuthService: AuthService, @unchecked Sendable {
         }
     }
 
-    func invalidateSession() {
-        state.withLock { $0.expiry = nil }
-        context.invalidate()
+    func invalidateSession(scope: AuthScope) {
+        state.withLock {
+            switch scope {
+            case .viewSecret: $0.viewSecretExpiry = nil
+            case .destructive: $0.destructiveExpiry = nil
+            }
+        }
+    }
+
+    func invalidateAllSessions() {
+        state.withLock {
+            $0.viewSecretExpiry = nil
+            $0.destructiveExpiry = nil
+        }
     }
 }

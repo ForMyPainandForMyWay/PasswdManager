@@ -3,6 +3,52 @@ import SwiftData
 import Observation
 import CryptoKit
 
+enum VaultError: Error {
+    case notInitialized
+    case itemNotFound
+}
+
+private struct PersistedVaultData: Codable {
+    var items: [PersistedItem]
+    var groups: [PersistedGroup]
+    var tags: [PersistedTag]
+}
+
+private struct PersistedItem: Codable {
+    var id: UUID
+    var title: String
+    var website: String?
+    var username: String?
+    var email: String?
+    var phone: String?
+    var notePreview: String?
+    var secretRef: String
+    var isFavorite: Bool
+    var isDeleted: Bool
+    var deletedAt: Date?
+    var createdAt: Date
+    var updatedAt: Date
+    var groupID: UUID?
+    var tagIDs: [UUID]
+}
+
+private struct PersistedGroup: Codable {
+    var id: UUID
+    var name: String
+    var colorHex: String?
+    var sortOrder: Int
+    var createdAt: Date
+    var updatedAt: Date
+}
+
+private struct PersistedTag: Codable {
+    var id: UUID
+    var name: String
+    var colorHex: String?
+    var createdAt: Date
+    var updatedAt: Date
+}
+
 @MainActor
 @Observable
 final class VaultRepository {
@@ -22,6 +68,7 @@ final class VaultRepository {
     var isLocked: Bool = true
     var isVaultReady: Bool = false
     private var vaultKey: SymmetricKey?
+    private var memorySecrets: [String: Data] = [:]
 
     init(
         authService: AuthService = LAAuthService(),
@@ -78,20 +125,42 @@ final class VaultRepository {
     }
 
     func initializeVault() async throws {
-        do {
-            let keyData = try keychainStore.loadVaultKey()
+        if let keyData = try? keychainStore.loadVaultKey() {
             vaultKey = SymmetricKey(data: keyData)
             isVaultReady = true
-        } catch KeychainError.itemNotFound {
-            let key = try cryptoService.createVaultKey()
-            try keychainStore.storeVaultKey(key.withUnsafeBytes { Data($0) })
-            vaultKey = key
+            return
+        }
+
+        if let keyData = try? Data(contentsOf: vaultKeyURL) {
+            vaultKey = SymmetricKey(data: keyData)
             isVaultReady = true
+            try? keychainStore.storeVaultKey(keyData)
+            return
+        }
+
+        let key = try cryptoService.createVaultKey()
+        let keyData = key.withUnsafeBytes { Data($0) }
+        do {
+            try keychainStore.storeVaultKey(keyData)
+        } catch {
+            try? keyData.write(to: vaultKeyURL, options: .atomic)
+        }
+        vaultKey = key
+        isVaultReady = true
+    }
+
+    func loadOrCreateSampleData() async {
+        loadSecretsFromFile()
+        if hasPersistedData {
+            loadMetadata()
+        } else {
+            await loadSampleData()
+            saveMetadata()
         }
     }
 
     func createItem(_ draft: VaultItemDraft) async throws {
-        guard let key = vaultKey else { return }
+        guard let key = vaultKey else { throw VaultError.notInitialized }
         let secretRef = UUID().uuidString
 
         let payload = SecretPayload(
@@ -103,13 +172,15 @@ final class VaultRepository {
         let itemID = UUID()
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key)
         let encryptedData = try JSONEncoder().encode(encrypted)
-        try keychainStore.storeSecret(encryptedData, for: secretRef)
+        storeSecretData(encryptedData, for: secretRef)
 
         let item = VaultItem(
             id: itemID,
             title: draft.title,
             website: draft.website,
             username: draft.username,
+            email: draft.email,
+            phone: draft.phone,
             notePreview: draft.notePreview,
             secretRef: secretRef,
             isFavorite: draft.isFavorite,
@@ -118,6 +189,7 @@ final class VaultRepository {
         )
         items.append(item)
         selectedItemID = item.id
+        saveMetadata()
     }
 
     func updateItem(id: UUID, mutation: VaultItemMutation) async throws {
@@ -127,6 +199,8 @@ final class VaultRepository {
         if let title = mutation.title { item.title = title }
         if let website = mutation.website { item.website = website }
         if let username = mutation.username { item.username = username }
+        if let email = mutation.email { item.email = email }
+        if let phone = mutation.phone { item.phone = phone }
         if let notePreview = mutation.notePreview { item.notePreview = notePreview }
         if let groupID = mutation.groupID {
             item.group = groups.first { $0.id == groupID }
@@ -144,18 +218,19 @@ final class VaultRepository {
             )
             let encrypted = try cryptoService.encrypt(payload, itemID: item.id, vaultKey: key)
             let encryptedData = try JSONEncoder().encode(encrypted)
-            try keychainStore.storeSecret(encryptedData, for: item.secretRef)
+            storeSecretData(encryptedData, for: item.secretRef)
         }
 
         item.updatedAt = Date()
+        saveMetadata()
     }
 
     func revealSecret(id: UUID, reason: String = "查看密码") async throws -> SecretPayload {
-        try await authService.authenticate(reason: reason)
+        try await authService.authenticate(reason: reason, scope: .viewSecret)
         guard let key = vaultKey else { throw AuthError.unavailable }
         guard let item = items.first(where: { $0.id == id }) else { throw AuthError.failed }
 
-        let encryptedData = try keychainStore.loadSecret(for: item.secretRef)
+        let encryptedData = try loadSecretData(for: item.secretRef)
         let encrypted = try JSONDecoder().decode(EncryptedSecret.self, from: encryptedData)
         return try cryptoService.decrypt(encrypted, itemID: item.id, vaultKey: key)
     }
@@ -171,6 +246,18 @@ final class VaultRepository {
         clipboardCleaner.copyToClipboard(username, clearAfter: 60)
     }
 
+    func copyEmail(id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              let email = item.email else { return }
+        clipboardCleaner.copyToClipboard(email, clearAfter: 60)
+    }
+
+    func copyPhone(id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              let phone = item.phone else { return }
+        clipboardCleaner.copyToClipboard(phone, clearAfter: 60)
+    }
+
     func moveToTrash(ids: [UUID]) {
         for id in ids {
             guard let item = items.first(where: { $0.id == id }) else { continue }
@@ -180,6 +267,7 @@ final class VaultRepository {
                 selectedItemID = nil
             }
         }
+        saveMetadata()
     }
 
     func restoreFromTrash(ids: [UUID]) {
@@ -188,42 +276,51 @@ final class VaultRepository {
             item.isDeleted = false
             item.deletedAt = nil
         }
+        saveMetadata()
     }
 
     func permanentlyDelete(ids: [UUID]) async throws {
-        try await authService.authenticate(reason: "永久删除密码条目")
+        try await authService.authenticate(reason: "永久删除密码条目", scope: .destructive)
 
         for id in ids {
             if let item = items.first(where: { $0.id == id }) {
                 try? keychainStore.deleteSecret(for: item.secretRef)
+                memorySecrets.removeValue(forKey: item.secretRef)
             }
         }
         items.removeAll { ids.contains($0.id) }
         if let sid = selectedItemID, ids.contains(sid) {
             selectedItemID = nil
         }
+        saveMetadata()
+        saveSecretsToFile()
     }
 
     func permanentlyDeleteWithoutAuth(ids: [UUID]) {
         for id in ids {
             if let item = items.first(where: { $0.id == id }) {
                 try? keychainStore.deleteSecret(for: item.secretRef)
+                memorySecrets.removeValue(forKey: item.secretRef)
             }
         }
         items.removeAll { ids.contains($0.id) }
         if let sid = selectedItemID, ids.contains(sid) {
             selectedItemID = nil
         }
+        saveMetadata()
+        saveSecretsToFile()
     }
 
     func toggleFavorite(id: UUID) {
         guard let item = items.first(where: { $0.id == id }) else { return }
         item.isFavorite.toggle()
+        saveMetadata()
     }
 
     func createGroup(name: String, colorHex: String? = nil) {
         let group = VaultGroup(name: name, colorHex: colorHex, sortOrder: groups.count)
         groups.append(group)
+        saveMetadata()
     }
 
     func updateGroup(id: UUID, name: String? = nil, colorHex: String? = nil) {
@@ -231,15 +328,18 @@ final class VaultRepository {
         if let name = name { group.name = name }
         if let colorHex = colorHex { group.colorHex = colorHex }
         group.updatedAt = Date()
+        saveMetadata()
     }
 
     func deleteGroup(id: UUID) {
         groups.removeAll { $0.id == id }
+        saveMetadata()
     }
 
     func createTag(name: String, colorHex: String? = nil) {
         let tag = VaultTag(name: name, colorHex: colorHex)
         tags.append(tag)
+        saveMetadata()
     }
 
     func updateTag(id: UUID, name: String? = nil, colorHex: String? = nil) {
@@ -247,10 +347,12 @@ final class VaultRepository {
         if let name = name { tag.name = name }
         if let colorHex = colorHex { tag.colorHex = colorHex }
         tag.updatedAt = Date()
+        saveMetadata()
     }
 
     func deleteTag(id: UUID) {
         tags.removeAll { $0.id == id }
+        saveMetadata()
     }
 
     func loadSampleData() async {
@@ -266,18 +368,18 @@ final class VaultRepository {
         let tag3 = VaultTag(name: "临时", colorHex: "#95A5A6")
         tags = [tag1, tag2, tag3]
 
-        let sampleEntries: [(String, String, String, String, String, VaultGroup?, [VaultTag], Bool)] = [
-            ("微信", "https://weixin.qq.com", "mywechat@example.com", "WeChatP@ss123", "主微信号，用于日常通讯", group1, [tag1, tag2], false),
-            ("微博", "https://weibo.com", "myweibo_user", "Weibo#2024!", "个人微博账号", group1, [tag1], false),
-            ("公司邮箱", "https://mail.company.com", "zhangsan@company.com", "C0mpanyM@il", "工作邮箱，每日检查", group2, [tag2], false),
-            ("企业微信", "https://work.weixin.qq.com", "zhangsan_work", "WorkWX!567", "公司内部通讯工具", group2, [tag1, tag2], false),
-            ("支付宝", "https://www.alipay.com", "payment@example.com", "AliP@y2024", "日常支付账户", group3, [tag1, tag2], false),
-            ("招商银行", "https://www.cmbchina.com", "6225****1234", "CmbCh1na#", "工资卡，主要储蓄账户", group3, [tag2], false),
-            ("GitHub", "https://github.com", "mygithub", "GitHub!Dev99", "代码仓库，包含多个项目", group2, [tag1], false),
-            ("已删除的旧账号", "https://old-site.com", "olduser", "OldP@ssword1", "不再使用的旧账号", group3, [tag3], true),
+        let sampleEntries: [(String, String, String, String, String, String, String, VaultGroup?, [VaultTag], Bool)] = [
+            ("微信", "https://weixin.qq.com", "mywechat@example.com", "wechat@example.com", "13800001111", "WeChatP@ss123", "主微信号，用于日常通讯", group1, [tag1, tag2], false),
+            ("微博", "https://weibo.com", "myweibo_user", "", "", "Weibo#2024!", "个人微博账号", group1, [tag1], false),
+            ("公司邮箱", "https://mail.company.com", "zhangsan@company.com", "zhangsan@company.com", "", "C0mpanyM@il", "工作邮箱，每日检查", group2, [tag2], false),
+            ("企业微信", "https://work.weixin.qq.com", "zhangsan_work", "zhangsan@company.com", "", "WorkWX!567", "公司内部通讯工具", group2, [tag1, tag2], false),
+            ("支付宝", "https://www.alipay.com", "payment@example.com", "payment@example.com", "13900002222", "AliP@y2024", "日常支付账户", group3, [tag1, tag2], false),
+            ("招商银行", "https://www.cmbchina.com", "6225****1234", "", "", "CmbCh1na#", "工资卡，主要储蓄账户", group3, [tag2], false),
+            ("GitHub", "https://github.com", "mygithub", "dev@example.com", "", "GitHub!Dev99", "代码仓库，包含多个项目", group2, [tag1], false),
+            ("已删除的旧账号", "https://old-site.com", "olduser", "old@example.com", "", "OldP@ssword1", "不再使用的旧账号", group3, [tag3], true),
         ]
 
-        for (title, website, username, password, note, group, itemTags, isDeleted) in sampleEntries {
+        for (title, website, username, email, phone, password, note, group, itemTags, isDeleted) in sampleEntries {
             let secretRef = UUID().uuidString
             let itemID = UUID()
 
@@ -289,7 +391,7 @@ final class VaultRepository {
             )
             if let encrypted = try? cryptoService.encrypt(payload, itemID: itemID, vaultKey: key),
                let encryptedData = try? JSONEncoder().encode(encrypted) {
-                try? keychainStore.storeSecret(encryptedData, for: secretRef)
+                storeSecretData(encryptedData, for: secretRef)
             }
 
             let item = VaultItem(
@@ -297,6 +399,8 @@ final class VaultRepository {
                 title: title,
                 website: website,
                 username: username,
+                email: email.isEmpty ? nil : email,
+                phone: phone.isEmpty ? nil : phone,
                 notePreview: note,
                 secretRef: secretRef,
                 isDeleted: isDeleted,
@@ -308,10 +412,48 @@ final class VaultRepository {
         }
     }
 
+    func storeSecretData(_ data: Data, for secretRef: String) {
+        memorySecrets[secretRef] = data
+        try? keychainStore.storeSecret(data, for: secretRef)
+        saveSecretsToFile()
+    }
+
+    private func loadSecretData(for secretRef: String) throws -> Data {
+        if let memData = memorySecrets[secretRef] {
+            return memData
+        }
+        if let keychainData = try? keychainStore.loadSecret(for: secretRef) {
+            memorySecrets[secretRef] = keychainData
+            return keychainData
+        }
+        throw KeychainError.itemNotFound
+    }
+
+    func appendItem(_ item: VaultItem) {
+        items.append(item)
+    }
+
+    func exportBackup() async throws -> BackupRecord {
+        try await authService.authenticate(reason: "导出加密备份", scope: .destructive)
+        return try BackupService.exportBackup(
+            items: items,
+            groups: groups,
+            tags: tags,
+            keychainStore: keychainStore
+        )
+    }
+
+    func importBackup(from url: URL) async throws {
+        try await authService.authenticate(reason: "导入加密备份", scope: .destructive)
+        let record = try BackupService.readBackup(from: url)
+        try await BackupService.importBackup(record, into: self)
+        saveMetadata()
+    }
+
     func lock() {
         isLocked = true
         if let auth = authService as? LAAuthService {
-            auth.invalidateSession()
+            auth.invalidateAllSessions()
         }
     }
 
@@ -321,12 +463,138 @@ final class VaultRepository {
             return true
         }
         do {
-            try await authService.authenticate(reason: "解锁 PwdSafe")
+            try await authService.authenticate(reason: "解锁 PwdSafe", scope: .viewSecret)
             isLocked = false
             return true
         } catch {
             return false
         }
+    }
+
+    private var dataDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("PwdSafe")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private var metadataURL: URL {
+        dataDirectory.appendingPathComponent("vault_metadata.json")
+    }
+
+    private var secretsURL: URL {
+        dataDirectory.appendingPathComponent("vault_secrets.json")
+    }
+
+    private var vaultKeyURL: URL {
+        dataDirectory.appendingPathComponent(".vault_key")
+    }
+
+    private var hasPersistedData: Bool {
+        FileManager.default.fileExists(atPath: metadataURL.path)
+    }
+
+    private func saveSecretsToFile() {
+        if let encoded = try? JSONEncoder().encode(memorySecrets) {
+            try? encoded.write(to: secretsURL, options: .atomic)
+        }
+    }
+
+    private func loadSecretsFromFile() {
+        guard let data = try? Data(contentsOf: secretsURL),
+              let loaded = try? JSONDecoder().decode([String: Data].self, from: data) else {
+            return
+        }
+        memorySecrets = loaded
+    }
+
+    private func saveMetadata() {
+        let persistedItems = items.map { item in
+            PersistedItem(
+                id: item.id,
+                title: item.title,
+                website: item.website,
+                username: item.username,
+                email: item.email,
+                phone: item.phone,
+                notePreview: item.notePreview,
+                secretRef: item.secretRef,
+                isFavorite: item.isFavorite,
+                isDeleted: item.isDeleted,
+                deletedAt: item.deletedAt,
+                createdAt: item.createdAt,
+                updatedAt: item.updatedAt,
+                groupID: item.group?.id,
+                tagIDs: item.tags.map(\.id)
+            )
+        }
+
+        let persistedGroups = groups.map { group in
+            PersistedGroup(
+                id: group.id,
+                name: group.name,
+                colorHex: group.colorHex,
+                sortOrder: group.sortOrder,
+                createdAt: group.createdAt,
+                updatedAt: group.updatedAt
+            )
+        }
+
+        let persistedTags = tags.map { tag in
+            PersistedTag(
+                id: tag.id,
+                name: tag.name,
+                colorHex: tag.colorHex,
+                createdAt: tag.createdAt,
+                updatedAt: tag.updatedAt
+            )
+        }
+
+        let data = PersistedVaultData(items: persistedItems, groups: persistedGroups, tags: persistedTags)
+        if let encoded = try? JSONEncoder().encode(data) {
+            try? encoded.write(to: metadataURL, options: .atomic)
+        }
+    }
+
+    private func loadMetadata() {
+        guard let data = try? Data(contentsOf: metadataURL),
+              let persisted = try? JSONDecoder().decode(PersistedVaultData.self, from: data) else {
+            return
+        }
+
+        let loadedGroups = persisted.groups.map { pg in
+            VaultGroup(id: pg.id, name: pg.name, colorHex: pg.colorHex, sortOrder: pg.sortOrder, createdAt: pg.createdAt, updatedAt: pg.updatedAt)
+        }
+        let loadedTags = persisted.tags.map { pt in
+            VaultTag(id: pt.id, name: pt.name, colorHex: pt.colorHex, createdAt: pt.createdAt, updatedAt: pt.updatedAt)
+        }
+
+        let groupMap = Dictionary(uniqueKeysWithValues: loadedGroups.map { ($0.id, $0) })
+        let tagMap = Dictionary(uniqueKeysWithValues: loadedTags.map { ($0.id, $0) })
+
+        let loadedItems = persisted.items.map { pi in
+            VaultItem(
+                id: pi.id,
+                title: pi.title,
+                website: pi.website,
+                username: pi.username,
+                email: pi.email,
+                phone: pi.phone,
+                notePreview: pi.notePreview,
+                secretRef: pi.secretRef,
+                isFavorite: pi.isFavorite,
+                isDeleted: pi.isDeleted,
+                deletedAt: pi.deletedAt,
+                createdAt: pi.createdAt,
+                updatedAt: pi.updatedAt,
+                group: pi.groupID.flatMap { groupMap[$0] },
+                tags: pi.tagIDs.compactMap { tagMap[$0] }
+            )
+        }
+
+        groups = loadedGroups
+        tags = loadedTags
+        items = loadedItems
     }
 }
 
@@ -334,6 +602,8 @@ struct VaultItemDraft: Sendable {
     var title: String
     var website: String?
     var username: String?
+    var email: String?
+    var phone: String?
     var password: String
     var notePreview: String?
     var isFavorite: Bool = false
@@ -345,6 +615,8 @@ struct VaultItemMutation: Sendable {
     var title: String? = nil
     var website: String? = nil
     var username: String? = nil
+    var email: String? = nil
+    var phone: String? = nil
     var password: String? = nil
     var notePreview: String? = nil
     var groupID: UUID? = nil

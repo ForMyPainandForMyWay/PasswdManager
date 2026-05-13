@@ -19,8 +19,13 @@ struct SidebarView: View {
             Section("分组") {
                 ForEach(repository.groups) { group in
                     NavigationLink(value: NavigationItem.group(group.id)) {
-                        Label(group.name, systemImage: "folder.fill")
-                            .foregroundStyle(Color(hex: group.colorHex) ?? .accentColor)
+                        Label {
+                            Text(group.name)
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "folder.fill")
+                                .foregroundStyle(Color(hex: group.colorHex) ?? .accentColor)
+                        }
                     }
                     .contextMenu {
                         Button("重命名") {}
@@ -40,7 +45,7 @@ struct SidebarView: View {
                 ForEach(repository.tags) { tag in
                     NavigationLink(value: NavigationItem.tag(tag.id)) {
                         Label(tag.name, systemImage: "tag.fill")
-                            .foregroundStyle(Color(hex: tag.colorHex) ?? .secondary)
+                            .foregroundStyle(.primary)
                     }
                     .contextMenu {
                         Button("重命名") {}

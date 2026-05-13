@@ -5,6 +5,7 @@ struct ItemDetailView: View {
 
     @State private var revealedPassword: String?
     @State private var isRevealing: Bool = false
+    @State private var revealError: String?
 
     var body: some View {
         if let item = repository.selectedItem() {
@@ -43,21 +44,9 @@ struct ItemDetailView: View {
         .safeAreaInset(edge: .bottom) {
             detailToolbar(for: item)
         }
-        .toolbar {
-            ToolbarItem {
-                if !item.isDeleted {
-                    Button {
-                        repository.editingItem = item
-                        repository.isEditorPresented = true
-                    } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .help("编辑")
-                }
-            }
-        }
         .onChange(of: item.id) { _, _ in
             revealedPassword = nil
+            revealError = nil
         }
     }
 
@@ -104,6 +93,18 @@ struct ItemDetailView: View {
                 }
             }
 
+            if let email = item.email, !email.isEmpty {
+                detailFieldRow(label: "邮箱", value: email, systemImage: "envelope") {
+                    repository.copyEmail(id: item.id)
+                }
+            }
+
+            if let phone = item.phone, !phone.isEmpty {
+                detailFieldRow(label: "手机", value: phone, systemImage: "phone") {
+                    repository.copyPhone(id: item.id)
+                }
+            }
+
             if item.isDeleted {
                 detailFieldRow(label: "密码", value: "已删除", systemImage: "lock.fill") {}
             } else if let revealed = revealedPassword {
@@ -122,7 +123,7 @@ struct ItemDetailView: View {
                         HStack(spacing: 4) {
                             if isRevealing {
                                 ProgressView()
-                                    .scaleEffect(0.7)
+                                    .controlSize(.small)
                             } else {
                                 Image(systemName: "eye")
                             }
@@ -131,6 +132,12 @@ struct ItemDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isRevealing)
+
+                    if let error = revealError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
                 .padding(12)
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -260,11 +267,18 @@ struct ItemDetailView: View {
 
     private func revealPassword(_ item: VaultItem) async {
         isRevealing = true
+        revealError = nil
         do {
             let secret = try await repository.revealSecret(id: item.id)
             revealedPassword = secret.password
+        } catch let error as AuthError {
+            if case .cancelled = error {
+                revealError = nil
+            } else {
+                revealError = "认证失败"
+            }
         } catch {
-            revealedPassword = nil
+            revealError = "无法解密: \(error.localizedDescription)"
         }
         isRevealing = false
     }
@@ -278,6 +292,7 @@ struct ItemDetailView: View {
     private func deleteFromTrash(_ item: VaultItem) async {
         do {
             try await repository.permanentlyDelete(ids: [item.id])
+        } catch AuthError.cancelled {
         } catch {
             repository.permanentlyDeleteWithoutAuth(ids: [item.id])
         }

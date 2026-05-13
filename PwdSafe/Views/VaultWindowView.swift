@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum NavigationItem: Hashable, Identifiable {
     case allItems
@@ -38,10 +39,55 @@ enum NavigationItem: Hashable, Identifiable {
     }
 }
 
+extension UTType {
+    static let pwdsafeBackup = UTType(exportedAs: "com.pwdsafe.backup", conformingTo: .json)
+}
+
+final class BackupDocument: FileDocument, @unchecked Sendable {
+    static var readableContentTypes: [UTType] { [.pwdsafeBackup] }
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents else {
+            throw BackupError.readFailed
+        }
+        self.data = data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private func backupDateString() -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd_HHmmss"
+    return formatter.string(from: Date())
+}
+
 struct VaultWindowView: View {
     @State private var repository = VaultRepository()
     @State private var selectedNavigation: NavigationItem = .allItems
     @State private var isInitializing: Bool = true
+    @State private var showSettings: Bool = false
+    @State private var showExportPanel: Bool = false
+    @State private var showImportPanel: Bool = false
+    @State private var exportError: String?
+    @State private var importError: String?
+    @State private var showExportError: Bool = false
+    @State private var showImportError: Bool = false
+    @State private var backupDocument: BackupDocument?
+    @State private var isExporting: Bool = false
+
+    private var isTrashMode: Bool {
+        if case .trash = selectedNavigation { return true }
+        return false
+    }
 
     var body: some View {
         Group {
@@ -69,6 +115,59 @@ struct VaultWindowView: View {
                     .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 500)
                 } detail: {
                     ItemDetailView(repository: repository)
+                        .toolbar {
+                            ToolbarItem {
+                                Menu {
+                                    Button {
+                                        Task { await prepareExport() }
+                                    } label: {
+                                        Label("导出加密备份...", systemImage: "square.and.arrow.up")
+                                    }
+                                    .disabled(isExporting)
+                                    Button {
+                                        showImportPanel = true
+                                    } label: {
+                                        Label("导入加密备份...", systemImage: "square.and.arrow.down")
+                                    }
+                                    Divider()
+                                    Button {
+                                        showSettings = true
+                                    } label: {
+                                        Label("设置...", systemImage: "gear")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                }
+                                .menuIndicator(.hidden)
+                                .help("更多操作")
+                            }
+                            ToolbarItem {
+                                if !isTrashMode, let item = repository.selectedItem(), !item.isDeleted {
+                                    Button {
+                                        repository.editingItem = item
+                                        repository.isEditorPresented = true
+                                    } label: {
+                                        Image(systemName: "pencil")
+                                    }
+                                    .help("编辑")
+                                }
+                            }
+                            ToolbarItem {
+                                if !isTrashMode {
+                                    Button {
+                                        repository.editingItem = nil
+                                        repository.newItemStartAsFavorite = false
+                                        repository.isEditorPresented = true
+                                    } label: {
+                                        Image(systemName: "plus.circle")
+                                    }
+                                    .help("新建密码条目")
+                                }
+                            }
+                        }
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView()
                 }
                 .sheet(isPresented: $repository.isEditorPresented) {
                     if let item = repository.editingItem {
@@ -77,16 +176,75 @@ struct VaultWindowView: View {
                         ItemEditorView(repository: repository, mode: .create, startAsFavorite: repository.newItemStartAsFavorite)
                     }
                 }
+                .fileExporter(
+                    isPresented: $showExportPanel,
+                    document: backupDocument ?? BackupDocument(data: Data()),
+                    contentType: .pwdsafeBackup,
+                    defaultFilename: "PwdSafe_\(backupDateString()).pwdsafe-backup"
+                ) { result in
+                    if case .failure(let error) = result {
+                        exportError = error.localizedDescription
+                        showExportError = true
+                    }
+                    backupDocument = nil
+                }
+                .fileImporter(
+                    isPresented: $showImportPanel,
+                    allowedContentTypes: [.pwdsafeBackup],
+                    allowsMultipleSelection: false
+                ) { result in
+                    switch result {
+                    case .success(let urls):
+                        guard let url = urls.first else { return }
+                        Task {
+                            do {
+                                try await repository.importBackup(from: url)
+                            } catch {
+                                importError = error.localizedDescription
+                                showImportError = true
+                            }
+                        }
+                    case .failure(let error):
+                        importError = error.localizedDescription
+                        showImportError = true
+                    }
+                }
+                .alert("导出失败", isPresented: $showExportError) {
+                    Button("确定", role: .cancel) {}
+                } message: {
+                    Text(exportError ?? "未知错误")
+                }
+                .alert("导入失败", isPresented: $showImportError) {
+                    Button("确定", role: .cancel) {}
+                } message: {
+                    Text(importError ?? "未知错误")
+                }
             }
         }
         .task {
             do {
                 try await repository.initializeVault()
-                await repository.loadSampleData()
+                await repository.loadOrCreateSampleData()
                 isInitializing = false
             } catch {
                 isInitializing = false
             }
         }
+    }
+
+    private func prepareExport() async {
+        isExporting = true
+        do {
+            let record = try await repository.exportBackup()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(record)
+            backupDocument = BackupDocument(data: data)
+            showExportPanel = true
+        } catch {
+            exportError = error.localizedDescription
+            showExportError = true
+        }
+        isExporting = false
     }
 }

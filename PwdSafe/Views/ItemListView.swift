@@ -23,6 +23,7 @@ struct ItemListView: View {
                     let allIDs = repository.trashedItems.map(\.id)
                     do {
                         try await repository.permanentlyDelete(ids: allIDs)
+                    } catch AuthError.cancelled {
                     } catch {
                         repository.permanentlyDeleteWithoutAuth(ids: allIDs)
                     }
@@ -70,10 +71,17 @@ struct ItemListView: View {
                     .swipeActions(edge: .trailing) {
                         if isTrashMode {
                             Button(role: .destructive) {
-                                repository.permanentlyDeleteWithoutAuth(ids: [item.id])
-                            } label: {
-                                Label("永久删除", systemImage: "trash.slash")
-                            }
+                                    Task {
+                                        do {
+                                            try await repository.permanentlyDelete(ids: [item.id])
+                                        } catch AuthError.cancelled {
+                                        } catch {
+                                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
+                                        }
+                                    }
+                                } label: {
+                                    Label("永久删除", systemImage: "trash.slash")
+                                }
                         } else {
                             Button(role: .destructive) {
                                 repository.moveToTrash(ids: [item.id])
@@ -136,15 +144,6 @@ struct ItemListView: View {
                     Image(systemName: "xmark.bin")
                 }
                 .help("清空回收站")
-            } else {
-                Button {
-                    repository.editingItem = nil
-                    repository.newItemStartAsFavorite = (selectedNavigation == .favorites)
-                    repository.isEditorPresented = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .help("新建密码条目")
             }
 
             Spacer()
@@ -201,12 +200,19 @@ struct ItemRowView: View {
                     Label("恢复", systemImage: "arrow.uturn.backward")
                 }
                 Divider()
-                Button(role: .destructive) {
-                    repository.permanentlyDeleteWithoutAuth(ids: [item.id])
-                } label: {
-                    Label("永久删除", systemImage: "trash.slash")
-                }
-            } else {
+                                Button(role: .destructive) {
+                                    Task {
+                                        do {
+                                            try await repository.permanentlyDelete(ids: [item.id])
+                                        } catch AuthError.cancelled {
+                                        } catch {
+                                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
+                                        }
+                                    }
+                                } label: {
+                                    Label("永久删除", systemImage: "trash.slash")
+                                }
+                            } else {
                 Button {
                     repository.toggleFavorite(id: item.id)
                 } label: {
