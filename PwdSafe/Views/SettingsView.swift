@@ -7,7 +7,7 @@ enum AuthPolicy: String, CaseIterable, Sendable {
     var displayName: String {
         switch self {
         case .everyTime: return "每次认证"
-        case .session5min: return "5 分钟内免重复认证"
+        case .session5min: return "3 分钟内免重复认证"
         }
     }
 }
@@ -112,7 +112,7 @@ struct SettingsView: View {
                     authPolicy = newValue.rawValue
                 }
 
-                Text("选择查看密码时是否需要每次都进行 Touch ID / Apple Watch 认证，还是在 5 分钟内免重复认证。")
+                Text("选择查看密码时是否需要每次都进行 Touch ID / Apple Watch 认证，还是在 3 分钟内免重复认证。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
