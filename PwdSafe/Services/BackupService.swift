@@ -57,7 +57,7 @@ enum BackupError: Error {
 struct BackupService: Sendable {
 
     static let currentVersion = 1
-    static let fileExtension = "pwdsafe-backup"
+    static let fileExtension = "pwd"
     static let utiType = "com.pwdsafe.backup"
 
     static func exportBackup(

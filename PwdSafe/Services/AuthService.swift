@@ -15,7 +15,7 @@ enum AuthScope: Sendable {
 
     var sessionDuration: TimeInterval {
         switch self {
-        case .viewSecret: return 180
+        case .viewSecret: return 300
         case .destructive: return 0
         }
     }

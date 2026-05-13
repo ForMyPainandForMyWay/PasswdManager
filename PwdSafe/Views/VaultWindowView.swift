@@ -41,7 +41,7 @@ enum NavigationItem: Hashable, Identifiable {
 }
 
 extension UTType {
-    static let pwdsafeBackup = UTType(exportedAs: "com.pwdsafe.backup", conformingTo: .json)
+    static let pwdsafeBackup = UTType(exportedAs: "com.pwdsafe.pwd", conformingTo: .json)
 }
 
 final class BackupDocument: FileDocument, @unchecked Sendable {
@@ -264,7 +264,7 @@ struct VaultWindowView: View {
                     isPresented: $showExportPanel,
                     document: backupDocument ?? BackupDocument(data: Data()),
                     contentType: .pwdsafeBackup,
-                    defaultFilename: "PwdSafe_\(backupDateString()).pwdsafe-backup"
+                    defaultFilename: "PwdSafe_\(backupDateString()).pwd"
                 ) { result in
                     if case .failure(let error) = result {
                         exportError = error.localizedDescription
@@ -283,6 +283,7 @@ struct VaultWindowView: View {
                         Task {
                             do {
                                 try await repository.importBackup(from: url)
+                            } catch AuthError.cancelled {
                             } catch {
                                 importError = error.localizedDescription
                                 showImportError = true
@@ -417,6 +418,7 @@ struct VaultWindowView: View {
             let data = try encoder.encode(record)
             backupDocument = BackupDocument(data: data)
             showExportPanel = true
+        } catch AuthError.cancelled {
         } catch {
             exportError = error.localizedDescription
             showExportError = true

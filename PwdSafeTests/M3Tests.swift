@@ -275,7 +275,7 @@ struct BackupServiceTests {
             tags: []
         )
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_backup.pwdsafe-backup")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_backup.pwd")
         try BackupService.writeBackup(original, to: tempURL)
         let decoded = try BackupService.readBackup(from: tempURL)
 
@@ -289,7 +289,7 @@ struct BackupServiceTests {
         let json = """
         {"version":999,"createdAt":0,"appVersion":"1.0","items":[],"groups":[],"tags":[]}
         """
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("bad_version.pwdsafe-backup")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("bad_version.pwd")
         try json.write(to: tempURL, atomically: true, encoding: .utf8)
 
         #expect(throws: BackupError.versionMismatch) {
@@ -299,7 +299,7 @@ struct BackupServiceTests {
     }
 
     @Test func testReadBackupInvalidFormat() throws {
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("invalid.pwdsafe-backup")
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("invalid.pwd")
         try "not json".write(to: tempURL, atomically: true, encoding: .utf8)
 
         #expect(throws: (any Error).self) {
