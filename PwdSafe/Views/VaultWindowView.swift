@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import LocalAuthentication
 
 enum NavigationItem: Hashable, Identifiable {
     case allItems
@@ -86,16 +85,7 @@ struct VaultWindowView: View {
     @State private var isExporting: Bool = false
     @State private var showEmptyTrashConfirmation: Bool = false
     @State private var showMoveAllToTrashConfirmation: Bool = false
-    @State private var lastActiveDate: Date = .distantPast
-    @State private var authErrorMessage: String?
-    @State private var authContext: LAContext = LAContext()
-    @State private var authAttemptID: UUID = UUID()
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("autoLockTimeout") private var autoLockTimeout: Int = AutoLockTimeout.minute5.rawValue
-
-    private var autoLockSeconds: TimeInterval {
-        TimeInterval(autoLockTimeout * 60)
-    }
 
     private var isTrashMode: Bool {
         if case .trash = selectedNavigation { return true }
@@ -136,8 +126,6 @@ struct VaultWindowView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(width: 960, height: 640)
-            } else if repository.isLocked {
-                lockScreen
             } else {
                 NavigationSplitView {
                     SidebarView(
@@ -152,103 +140,17 @@ struct VaultWindowView: View {
                     )
                     .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 500)
                 } detail: {
-                    ItemDetailView(repository: repository)
-                        .toolbar {
-                            ToolbarItem {
-                                if !isTrashMode {
-                                    Button {
-                                        repository.editingItem = nil
-                                        repository.newItemStartAsFavorite = false
-                                        repository.isEditorPresented = true
-                                    } label: {
-                                        Image(systemName: "plus")
-                                    }
-                                    .help("新建密码条目")
-                                }
+                    if repository.isLocked {
+                        lockedDetailPlaceholder
+                            .toolbar {
+                                lockToolbarButton
                             }
-                            ToolbarItem {
-                                if !isTrashMode, let item = repository.selectedItem(), !item.isDeleted {
-                                    Button {
-                                        Task { await editItem(item) }
-                                    } label: {
-                                        Image(systemName: "pencil")
-                                    }
-                                    .help("编辑")
-                                }
+                    } else {
+                        ItemDetailView(repository: repository)
+                            .toolbar {
+                                vaultToolbar
                             }
-                            ToolbarItem {
-                                if isTrashMode, let item = repository.selectedItem() {
-                                    Button {
-                                        repository.restoreFromTrash(ids: [item.id])
-                                    } label: {
-                                        Image(systemName: "arrow.uturn.backward")
-                                    }
-                                    .help("恢复")
-                                }
-                            }
-                            ToolbarItem {
-                                if isTrashMode, let item = repository.selectedItem() {
-                                    Button(role: .destructive) {
-                                        Task { await deleteFromTrash(item) }
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .help("永久删除")
-                                }
-                            }
-                            ToolbarItem {
-                                if isTrashMode {
-                                    Button(role: .destructive) {
-                                        showEmptyTrashConfirmation = true
-                                    } label: {
-                                        Image(systemName: "xmark.bin")
-                                    }
-                                    .help("清空回收站")
-                                } else if let item = repository.selectedItem(), !item.isDeleted {
-                                    Button(role: .destructive) {
-                                        repository.moveToTrash(ids: [item.id])
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .help("移到回收站")
-                                }
-                            }
-                            ToolbarItem {
-                                if !isTrashMode {
-                                    Button(role: .destructive) {
-                                        showMoveAllToTrashConfirmation = true
-                                    } label: {
-                                        Image(systemName: "xmark.bin")
-                                    }
-                                    .help("清空条目到回收站")
-                                }
-                            }
-                            ToolbarItem {
-                                Menu {
-                                    Button {
-                                        Task { await prepareExport() }
-                                    } label: {
-                                        Label("导出加密备份...", systemImage: "square.and.arrow.up")
-                                    }
-                                    .disabled(isExporting)
-                                    Button {
-                                        showImportPanel = true
-                                    } label: {
-                                        Label("导入加密备份...", systemImage: "square.and.arrow.down")
-                                    }
-                                    Divider()
-                                    Button {
-                                        showSettings = true
-                                    } label: {
-                                        Label("设置...", systemImage: "gear")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle")
-                                }
-                                .menuIndicator(.hidden)
-                                .help("更多操作")
-                            }
-                        }
+                    }
                 }
                 .sheet(isPresented: $showSettings) {
                     SettingsView()
@@ -342,13 +244,8 @@ struct VaultWindowView: View {
             repository.selectItem(nil)
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active && !repository.isLocked {
-                let now = Date()
-                if autoLockTimeout > 0 && now.timeIntervalSince(lastActiveDate) > autoLockSeconds {
-                    repository.lock()
-                }
-            } else if newPhase == .background || newPhase == .inactive {
-                lastActiveDate = Date()
+            if newPhase == .background || newPhase == .inactive {
+                repository.lock()
             }
         }
         .task {
@@ -360,37 +257,148 @@ struct VaultWindowView: View {
                 isInitializing = false
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .lockVault)) { _ in
+            repository.lock()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            repository.searchQuery = ""
+        }
     }
 
-    private var lockScreen: some View {
-        VStack(spacing: 20) {
+    private var lockedDetailPlaceholder: some View {
+        VStack(spacing: 16) {
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary.opacity(0.5))
             Text("PwdSafe 已锁定")
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text("需要认证以解锁保险库")
-                .font(.body)
+                .font(.title3)
                 .foregroundStyle(.secondary)
+            Text("点击右上角解锁按钮以查看密码")
+                .font(.body)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var lockToolbarButton: some ToolbarContent {
+        ToolbarItem {
             Button {
                 Task { await unlockVault() }
             } label: {
-                Text("点击解锁")
-                    .font(.headline)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 10)
+                Image(systemName: "lock.open")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .help("解锁保险库")
         }
-        .frame(width: 960, height: 640)
+    }
+
+    @ToolbarContentBuilder
+    private var vaultToolbar: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                repository.lock()
+            } label: {
+                Image(systemName: "lock")
+            }
+            .help("锁定保险库")
+        }
+        ToolbarItem {
+            if !isTrashMode {
+                Button {
+                    repository.editingItem = nil
+                    repository.newItemStartAsFavorite = false
+                    repository.isEditorPresented = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("新建密码条目")
+            }
+        }
+        ToolbarItem {
+            if !isTrashMode, let item = repository.selectedItem(), !item.isDeleted {
+                Button {
+                    Task { await editItem(item) }
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .help("编辑")
+            }
+        }
+        ToolbarItem {
+            if isTrashMode, let item = repository.selectedItem() {
+                Button {
+                    repository.restoreFromTrash(ids: [item.id])
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .help("恢复")
+            }
+        }
+        ToolbarItem {
+            if isTrashMode, let item = repository.selectedItem() {
+                Button(role: .destructive) {
+                    Task { await deleteFromTrash(item) }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("永久删除")
+            }
+        }
+        ToolbarItem {
+            if isTrashMode {
+                Button(role: .destructive) {
+                    showEmptyTrashConfirmation = true
+                } label: {
+                    Image(systemName: "xmark.bin")
+                }
+                .help("清空回收站")
+            } else if let item = repository.selectedItem(), !item.isDeleted {
+                Button(role: .destructive) {
+                    repository.moveToTrash(ids: [item.id])
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("移到回收站")
+            }
+        }
+        ToolbarItem {
+            if !isTrashMode {
+                Button(role: .destructive) {
+                    showMoveAllToTrashConfirmation = true
+                } label: {
+                    Image(systemName: "xmark.bin")
+                }
+                .help("清空条目到回收站")
+            }
+        }
+        ToolbarItem {
+            Menu {
+                Button {
+                    Task { await prepareExport() }
+                } label: {
+                    Label("导出加密备份...", systemImage: "square.and.arrow.up")
+                }
+                .disabled(isExporting)
+                Button {
+                    showImportPanel = true
+                } label: {
+                    Label("导入加密备份...", systemImage: "square.and.arrow.down")
+                }
+                Divider()
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("设置...", systemImage: "gear")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuIndicator(.hidden)
+            .help("更多操作")
+        }
     }
 
     private func unlockVault() async {
-        if await repository.unlock() {
-            lastActiveDate = Date()
-        }
+        _ = await repository.unlock()
     }
 
     private func deleteFromTrash(_ item: VaultItem) async {

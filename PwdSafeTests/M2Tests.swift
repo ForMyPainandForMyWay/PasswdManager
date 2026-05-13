@@ -251,6 +251,7 @@ final class MockKeychainStore: KeychainStore, @unchecked Sendable {
         return data
     }
     func deleteVaultKey() throws { vaultKeyData = nil }
+    func vaultKeyExists() -> Bool { vaultKeyData != nil }
     func storeSecret(_ data: Data, for secretRef: String) throws { secrets[secretRef] = data }
     func loadSecret(for secretRef: String) throws -> Data {
         guard let data = secrets[secretRef] else { throw KeychainError.itemNotFound }
