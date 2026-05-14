@@ -149,37 +149,46 @@ struct BackupService: Sendable {
         _ record: BackupRecord,
         into repository: VaultRepository
     ) async throws {
-        let existingGroupIDs = Set(repository.groups.map(\.id))
-        for group in record.groups {
-            if !existingGroupIDs.contains(group.id) {
-                repository.appendGroup(VaultGroup(
-                    id: group.id,
-                    name: group.name,
-                    colorHex: group.colorHex,
-                    colorHexes: group.colorHexes,
-                    sortOrder: group.sortOrder,
-                    createdAt: group.createdAt,
-                    updatedAt: group.updatedAt
-                ))
+        var groupMap: [UUID: VaultGroup] = [:]
+        for backupGroup in record.groups {
+            if let existing = repository.groups.first(where: { $0.id == backupGroup.id }) {
+                groupMap[backupGroup.id] = existing
+            } else if let existing = repository.groups.first(where: { $0.name == backupGroup.name }) {
+                groupMap[backupGroup.id] = existing
+            } else {
+                let newGroup = VaultGroup(
+                    id: backupGroup.id,
+                    name: backupGroup.name,
+                    colorHex: backupGroup.colorHex,
+                    colorHexes: backupGroup.colorHexes,
+                    sortOrder: backupGroup.sortOrder,
+                    createdAt: backupGroup.createdAt,
+                    updatedAt: backupGroup.updatedAt
+                )
+                repository.appendGroup(newGroup)
+                groupMap[backupGroup.id] = newGroup
             }
         }
 
-        let existingTagIDs = Set(repository.tags.map(\.id))
-        for tag in record.tags {
-            if !existingTagIDs.contains(tag.id) {
-                repository.appendTag(VaultTag(
-                    id: tag.id,
-                    name: tag.name,
-                    colorHex: tag.colorHex,
-                    colorHexes: tag.colorHexes,
-                    createdAt: tag.createdAt,
-                    updatedAt: tag.updatedAt
-                ))
+        var tagMap: [UUID: VaultTag] = [:]
+        for backupTag in record.tags {
+            if let existing = repository.tags.first(where: { $0.id == backupTag.id }) {
+                tagMap[backupTag.id] = existing
+            } else if let existing = repository.tags.first(where: { $0.name == backupTag.name }) {
+                tagMap[backupTag.id] = existing
+            } else {
+                let newTag = VaultTag(
+                    id: backupTag.id,
+                    name: backupTag.name,
+                    colorHex: backupTag.colorHex,
+                    colorHexes: backupTag.colorHexes,
+                    createdAt: backupTag.createdAt,
+                    updatedAt: backupTag.updatedAt
+                )
+                repository.appendTag(newTag)
+                tagMap[backupTag.id] = newTag
             }
         }
-
-        let groupMap = Dictionary(uniqueKeysWithValues: repository.groups.map { ($0.id, $0) })
-        let tagMap = Dictionary(uniqueKeysWithValues: repository.tags.map { ($0.id, $0) })
 
         for backupItem in record.items {
             if let existing = repository.items.first(where: { $0.id == backupItem.id }) {

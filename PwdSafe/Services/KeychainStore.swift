@@ -8,7 +8,6 @@ enum KeychainError: Error {
     case itemNotFound
     case invalidData
     case accessControlFailed
-    case vaultKeyNotLoaded
 }
 
 protocol KeychainStore: Sendable {

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct PwdSafeApp: App {
@@ -19,23 +20,6 @@ struct PwdSafeApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
-            CommandMenu("保险库") {
-                Button("搜索密码条目") {
-                    NotificationCenter.default.post(
-                        name: .focusSearch,
-                        object: nil
-                    )
-                }
-                .keyboardShortcut("f", modifiers: .command)
-                Divider()
-                Button("锁定 PwdSafe") {
-                    NotificationCenter.default.post(
-                        name: .lockVault,
-                        object: nil
-                    )
-                }
-                .keyboardShortcut("l", modifiers: .command)
-            }
             SidebarCommands()
         }
     }
@@ -43,6 +27,4 @@ struct PwdSafeApp: App {
 
 extension Notification.Name {
     static let createNewItem = Notification.Name("PwdSafe.createNewItem")
-    static let lockVault = Notification.Name("PwdSafe.lockVault")
-    static let focusSearch = Notification.Name("PwdSafe.focusSearch")
 }

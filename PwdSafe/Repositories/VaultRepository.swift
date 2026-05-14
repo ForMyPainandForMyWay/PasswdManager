@@ -133,26 +133,14 @@ final class VaultRepository {
             return
         }
 
-        if let keyData = try? Data(contentsOf: vaultKeyURL) {
-            vaultKey = SymmetricKey(data: keyData)
-            isVaultReady = true
-            try? keychainStore.storeVaultKey(keyData)
-            return
-        }
-
         let key = try cryptoService.createVaultKey()
         let keyData = key.withUnsafeBytes { Data($0) }
-        do {
-            try keychainStore.storeVaultKey(keyData)
-        } catch {
-            try? keyData.write(to: vaultKeyURL, options: .atomic)
-        }
+        try keychainStore.storeVaultKey(keyData)
         vaultKey = key
         isVaultReady = true
     }
 
     func loadOrCreateSampleData() async {
-        loadSecretsFromFile()
         if hasPersistedData {
             loadMetadata()
         } else {
@@ -298,7 +286,6 @@ final class VaultRepository {
             selectedItemID = nil
         }
         saveMetadata()
-        saveSecretsToFile()
     }
 
     func permanentlyDeleteWithoutAuth(ids: [UUID]) {
@@ -313,7 +300,6 @@ final class VaultRepository {
             selectedItemID = nil
         }
         saveMetadata()
-        saveSecretsToFile()
     }
 
     func toggleFavorite(id: UUID) {
@@ -422,7 +408,6 @@ final class VaultRepository {
     func storeSecretData(_ data: Data, for secretRef: String) {
         memorySecrets[secretRef] = data
         try? keychainStore.storeSecret(data, for: secretRef)
-        saveSecretsToFile()
     }
 
     private func loadSecretData(for secretRef: String) throws -> Data {
@@ -508,30 +493,8 @@ final class VaultRepository {
         dataDirectory.appendingPathComponent("vault_metadata.json")
     }
 
-    private var secretsURL: URL {
-        dataDirectory.appendingPathComponent("vault_secrets.json")
-    }
-
-    private var vaultKeyURL: URL {
-        dataDirectory.appendingPathComponent(".vault_key")
-    }
-
     private var hasPersistedData: Bool {
         FileManager.default.fileExists(atPath: metadataURL.path)
-    }
-
-    private func saveSecretsToFile() {
-        if let encoded = try? JSONEncoder().encode(memorySecrets) {
-            try? encoded.write(to: secretsURL, options: .atomic)
-        }
-    }
-
-    private func loadSecretsFromFile() {
-        guard let data = try? Data(contentsOf: secretsURL),
-              let loaded = try? JSONDecoder().decode([String: Data].self, from: data) else {
-            return
-        }
-        memorySecrets = loaded
     }
 
     private func saveMetadata() {
