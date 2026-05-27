@@ -13,7 +13,6 @@ enum KeychainError: Error {
 protocol KeychainStore: Sendable {
     func storeVaultKey(_ key: Data) throws
     func loadVaultKey() throws -> Data
-    func deleteVaultKey() throws
     func storeSecret(_ data: Data, for secretRef: String) throws
     func loadSecret(for secretRef: String) throws -> Data
     func deleteSecret(for secretRef: String) throws
@@ -24,11 +23,12 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
     private let vaultKeyAccount = "PwdSafe.VaultKey"
 
     func storeVaultKey(_ key: Data) throws {
-        try deleteVaultKey()
-        let status = saveGenericPassword(
-            account: vaultKeyAccount,
-            data: key
-        )
+        _ = deleteGenericPassword(account: vaultKeyAccount)
+        let status = saveGenericPassword(account: vaultKeyAccount, data: key)
+        if status == errSecDuplicateItem {
+            _ = updateGenericPassword(account: vaultKeyAccount, data: key)
+            return
+        }
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
         }
@@ -37,28 +37,19 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
     func loadVaultKey() throws -> Data {
         let status = readGenericPassword(account: vaultKeyAccount)
         switch status {
-        case .success(let data):
-            return data
-        case .notFound:
-            throw KeychainError.itemNotFound
-        case .error(let code):
-            throw KeychainError.readFailed(code)
-        }
-    }
-
-    func deleteVaultKey() throws {
-        let status = deleteGenericPassword(account: vaultKeyAccount)
-        if status != errSecSuccess && status != errSecItemNotFound {
-            throw KeychainError.deleteFailed(status)
+        case .success(let data): return data
+        case .notFound: throw KeychainError.itemNotFound
+        case .error(let code): throw KeychainError.readFailed(code)
         }
     }
 
     func storeSecret(_ data: Data, for secretRef: String) throws {
-        try deleteSecret(for: secretRef)
-        let status = saveGenericPassword(
-            account: secretRef,
-            data: data
-        )
+        _ = deleteGenericPassword(account: secretRef)
+        let status = saveGenericPassword(account: secretRef, data: data)
+        if status == errSecDuplicateItem {
+            _ = updateGenericPassword(account: secretRef, data: data)
+            return
+        }
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
         }
@@ -67,12 +58,9 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
     func loadSecret(for secretRef: String) throws -> Data {
         let status = readGenericPassword(account: secretRef)
         switch status {
-        case .success(let data):
-            return data
-        case .notFound:
-            throw KeychainError.itemNotFound
-        case .error(let code):
-            throw KeychainError.readFailed(code)
+        case .success(let data): return data
+        case .notFound: throw KeychainError.itemNotFound
+        case .error(let code): throw KeychainError.readFailed(code)
         }
     }
 
@@ -100,6 +88,16 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
         return SecItemAdd(query as CFDictionary, nil)
     }
 
+    private func updateGenericPassword(account: String, data: Data) -> OSStatus {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: serviceName,
+            kSecAttrAccount as String: account,
+        ]
+        let attrs: [String: Any] = [kSecValueData as String: data]
+        return SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
+    }
+
     private func readGenericPassword(account: String) -> ReadResult {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -108,14 +106,11 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-
         guard status != errSecItemNotFound else { return .notFound }
         guard status == errSecSuccess else { return .error(status) }
         guard let data = item as? Data else { return .error(errSecDecode) }
-
         return .success(data)
     }
 

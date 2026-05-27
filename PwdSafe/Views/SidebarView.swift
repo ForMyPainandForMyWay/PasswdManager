@@ -61,6 +61,9 @@ struct SidebarView: View {
                             }
                         }
                     }
+                    .onMove { source, destination in
+                        repository.moveGroups(from: source, to: destination)
+                    }
                     Button {
                         showGroupSheet = true
                     } label: {
@@ -117,6 +120,9 @@ struct SidebarView: View {
                                 repository.deleteTag(id: tag.id)
                             }
                         }
+                    }
+                    .onMove { source, destination in
+                        repository.moveTags(from: source, to: destination)
                     }
                     Button {
                         showTagSheet = true

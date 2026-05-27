@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import LocalAuthentication
 
 enum NavigationItem: Hashable, Identifiable {
     case allItems
@@ -84,12 +83,16 @@ struct VaultWindowView: View {
     @State private var showImportError: Bool = false
     @State private var backupDocument: BackupDocument?
     @State private var isExporting: Bool = false
+    @State private var showCSVExportPanel: Bool = false
+    @State private var csvDocument: BackupDocument?
     @State private var showEmptyTrashConfirmation: Bool = false
     @State private var showMoveAllToTrashConfirmation: Bool = false
+    @State private var showExportPasswordPrompt: Bool = false
+    @State private var showImportPasswordPrompt: Bool = false
+    @State private var pendingImportURL: URL?
+    @State private var exportPassword: String = ""
+    @State private var importPassword: String = ""
     @State private var lastActiveDate: Date = .distantPast
-    @State private var authErrorMessage: String?
-    @State private var authContext: LAContext = LAContext()
-    @State private var authAttemptID: UUID = UUID()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("autoLockTimeout") private var autoLockTimeout: Int = AutoLockTimeout.minute5.rawValue
 
@@ -226,7 +229,7 @@ struct VaultWindowView: View {
                             ToolbarItem {
                                 Menu {
                                     Button {
-                                        Task { await prepareExport() }
+                                        prepareExport()
                                     } label: {
                                         Label("导出加密备份...", systemImage: "square.and.arrow.up")
                                     }
@@ -235,6 +238,11 @@ struct VaultWindowView: View {
                                         showImportPanel = true
                                     } label: {
                                         Label("导入加密备份...", systemImage: "square.and.arrow.down")
+                                    }
+                                    Button {
+                                        Task { await performCSVExport() }
+                                    } label: {
+                                        Label("导出 CSV...", systemImage: "tablecells")
                                     }
                                     Divider()
                                     Button {
@@ -272,6 +280,18 @@ struct VaultWindowView: View {
                     }
                     backupDocument = nil
                 }
+                .fileExporter(
+                    isPresented: $showCSVExportPanel,
+                    document: csvDocument ?? BackupDocument(data: Data()),
+                    contentType: .commaSeparatedText,
+                    defaultFilename: "PwdSafe_\(backupDateString()).csv"
+                ) { result in
+                    if case .failure(let error) = result {
+                        exportError = error.localizedDescription
+                        showExportError = true
+                    }
+                    csvDocument = nil
+                }
                 .fileImporter(
                     isPresented: $showImportPanel,
                     allowedContentTypes: [.pwdsafeBackup],
@@ -280,15 +300,7 @@ struct VaultWindowView: View {
                     switch result {
                     case .success(let urls):
                         guard let url = urls.first else { return }
-                        Task {
-                            do {
-                                try await repository.importBackup(from: url)
-                            } catch AuthError.cancelled {
-                            } catch {
-                                importError = error.localizedDescription
-                                showImportError = true
-                            }
-                        }
+                        Task { await performImport(url: url) }
                     case .failure(let error):
                         importError = error.localizedDescription
                         showImportError = true
@@ -303,6 +315,33 @@ struct VaultWindowView: View {
                     Button("确定", role: .cancel) {}
                 } message: {
                     Text(importError ?? "未知错误")
+                }
+                .alert("设置备份密码", isPresented: $showExportPasswordPrompt) {
+                    SecureField("密码", text: $exportPassword)
+                    Button("取消", role: .cancel) { exportPassword = "" }
+                    Button("导出") {
+                        let pwd = exportPassword
+                        exportPassword = ""
+                        Task { await performExport(password: pwd) }
+                    }
+                    .disabled(exportPassword.isEmpty)
+                } message: {
+                    Text("设置密码以保护备份文件，恢复时需输入此密码。")
+                }
+                .alert("输入备份密码", isPresented: $showImportPasswordPrompt) {
+                    SecureField("密码", text: $importPassword)
+                    Button("取消", role: .cancel) {
+                        importPassword = ""
+                        pendingImportURL = nil
+                    }
+                    Button("解锁") {
+                        let pwd = importPassword
+                        importPassword = ""
+                        Task { await performImportWithPassword(password: pwd) }
+                    }
+                    .disabled(importPassword.isEmpty)
+                } message: {
+                    Text("请输入备份时设置的密码以解密保险库。")
                 }
                 .confirmationDialog(
                     "清空回收站",
@@ -338,6 +377,7 @@ struct VaultWindowView: View {
                 }
             }
         }
+
         .onChange(of: selectedNavigation) { _, _ in
             repository.selectItem(nil)
         }
@@ -354,7 +394,7 @@ struct VaultWindowView: View {
         .task {
             do {
                 try await repository.initializeVault()
-                await repository.loadOrCreateSampleData()
+                repository.loadPersistedData()
                 isInitializing = false
             } catch {
                 isInitializing = false
@@ -409,10 +449,14 @@ struct VaultWindowView: View {
         }
     }
 
-    private func prepareExport() async {
+    private func prepareExport() {
+        showExportPasswordPrompt = true
+    }
+
+    private func performExport(password: String) async {
         isExporting = true
         do {
-            let record = try await repository.exportBackup()
+            let record = try await repository.exportBackup(password: password)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(record)
@@ -424,5 +468,44 @@ struct VaultWindowView: View {
             showExportError = true
         }
         isExporting = false
+    }
+
+    private func performImport(url: URL) async {
+        do {
+            if try await repository.tryImportBackupLocal(from: url) {
+                return
+            }
+            pendingImportURL = url
+            showImportPasswordPrompt = true
+        } catch {
+            importError = error.localizedDescription
+            showImportError = true
+        }
+    }
+
+    private func performCSVExport() async {
+        do {
+            let csv = try await BackupService.exportCSV(items: repository.allItems, repository: repository)
+            csvDocument = BackupDocument(data: csv.data(using: .utf8) ?? Data())
+            showCSVExportPanel = true
+        } catch {
+            exportError = error.localizedDescription
+            showExportError = true
+        }
+    }
+
+    private func performImportWithPassword(password: String) async {
+        guard let url = pendingImportURL else { return }
+        do {
+            try await repository.importBackup(from: url, password: password)
+            pendingImportURL = nil
+        } catch BackupError.wrongPassword {
+            importError = "密码错误"
+            showImportError = true
+        } catch AuthError.cancelled {
+        } catch {
+            importError = error.localizedDescription
+            showImportError = true
+        }
     }
 }

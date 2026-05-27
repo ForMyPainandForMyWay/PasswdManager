@@ -123,15 +123,6 @@ struct PasswordGeneratorTests {
         #expect(strength == .veryStrong)
     }
 
-    @Test func testEntropyBits() {
-        let entropy = PasswordGenerator.entropyBits(of: "Abc123!@")
-        #expect(entropy > 0)
-    }
-
-    @Test func testEntropyBitsEmptyPassword() {
-        let entropy = PasswordGenerator.entropyBits(of: "")
-        #expect(entropy == 0)
-    }
 
     @Test func testStrengthComparison() {
         #expect(PasswordGenerator.Strength.veryWeak < PasswordGenerator.Strength.weak)
@@ -163,9 +154,9 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testExportBackupProducesValidRecord() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
 
-        #expect(record.version == 1)
+        #expect(record.version == 3)
         #expect(record.items.count == 8)
         #expect(record.groups.count == 3)
         #expect(record.tags.count == 3)
@@ -173,7 +164,7 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testExportBackupIncludesEncryptedSecrets() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
 
         for item in record.items {
             #expect(!item.encryptedSecret.ciphertext.isEmpty)
@@ -184,7 +175,7 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testExportBackupItemHasMetadata() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
         let ghItem = record.items.first { $0.title == "GitHub" }
         #expect(ghItem != nil)
         #expect(ghItem?.website == "https://github.com")
@@ -193,14 +184,14 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testExportBackupIncludesDeletedItems() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
         let deletedItem = record.items.first { $0.isDeleted }
         #expect(deletedItem != nil)
         #expect(deletedItem?.title == "已删除的旧账号")
     }
 
     @Test mutating func testBackupRecordCodableRoundtrip() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
         let data = try JSONEncoder().encode(record)
         let decoded = try JSONDecoder().decode(BackupRecord.self, from: data)
 
@@ -211,7 +202,7 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testImportBackupPreservesData() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
 
         let newRepo = VaultRepository(
             authService: MockAuthService(),
@@ -230,7 +221,7 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testImportBackupPasswordsDecryptable() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
 
         let sourceRepo = VaultRepository(
             authService: MockAuthService(),
@@ -246,7 +237,7 @@ struct BackupServiceTests {
     }
 
     @Test mutating func testImportBackupMergesGroups() async throws {
-        let record = try await repository.exportBackup()
+        let record = try await repository.exportBackup(password: "test")
 
         let newRepo = VaultRepository(
             authService: MockAuthService(),
@@ -276,7 +267,9 @@ struct BackupServiceTests {
         )
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_backup.pwd")
-        try BackupService.writeBackup(original, to: tempURL)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(original).write(to: tempURL, options: .atomic)
         let decoded = try BackupService.readBackup(from: tempURL)
 
         #expect(decoded.version == 1)
@@ -329,12 +322,6 @@ struct SettingsDefaultsTests {
         #expect(timeout == 0 || timeout == 5)
     }
 
-    @Test func testTrashAutoCleanupDefault() {
-        let defaults = UserDefaults.standard
-        let cleanup = defaults.integer(forKey: "trashAutoCleanup")
-        #expect(cleanup == 0)
-    }
-
     @Test func testAuthPolicyAllCases() {
         let cases = AuthPolicy.allCases
         #expect(cases.count == 2)
@@ -352,8 +339,4 @@ struct SettingsDefaultsTests {
         #expect(cases.count == 4)
     }
 
-    @Test func testTrashAutoCleanupAllCases() {
-        let cases = TrashAutoCleanup.allCases
-        #expect(cases.count == 3)
-    }
 }

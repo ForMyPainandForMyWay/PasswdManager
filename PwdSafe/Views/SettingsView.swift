@@ -44,32 +44,16 @@ enum AutoLockTimeout: Int, CaseIterable, Sendable {
     }
 }
 
-enum TrashAutoCleanup: Int, CaseIterable, Sendable {
-    case never = 0
-    case days30 = 30
-    case days90 = 90
-
-    var displayName: String {
-        switch self {
-        case .never: return "不自动清理"
-        case .days30: return "30 天后自动清理"
-        case .days90: return "90 天后自动清理"
-        }
-    }
-}
-
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("authPolicy") private var authPolicy: String = AuthPolicy.session5min.rawValue
     @AppStorage("clipboardTimeout") private var clipboardTimeout: Int = ClipboardTimeout.seconds30.rawValue
     @AppStorage("autoLockTimeout") private var autoLockTimeout: Int = AutoLockTimeout.minute5.rawValue
-    @AppStorage("trashAutoCleanup") private var trashAutoCleanup: Int = TrashAutoCleanup.never.rawValue
 
     @State private var selectedAuthPolicy: AuthPolicy = .session5min
     @State private var selectedClipboardTimeout: ClipboardTimeout = .seconds30
     @State private var selectedAutoLockTimeout: AutoLockTimeout = .minute5
-    @State private var selectedTrashAutoCleanup: TrashAutoCleanup = .never
 
     var body: some View {
         NavigationStack {
@@ -96,7 +80,6 @@ struct SettingsView: View {
             selectedAuthPolicy = AuthPolicy(rawValue: authPolicy) ?? .session5min
             selectedClipboardTimeout = ClipboardTimeout(rawValue: clipboardTimeout) ?? .seconds30
             selectedAutoLockTimeout = AutoLockTimeout(rawValue: autoLockTimeout) ?? .minute5
-            selectedTrashAutoCleanup = TrashAutoCleanup(rawValue: trashAutoCleanup) ?? .never
         }
     }
 
@@ -159,22 +142,6 @@ struct SettingsView: View {
                 Text("剪贴板")
             }
 
-            Section {
-                Picker("回收站自动清理", selection: $selectedTrashAutoCleanup) {
-                    ForEach(TrashAutoCleanup.allCases, id: \.self) { cleanup in
-                        Text(cleanup.displayName).tag(cleanup)
-                    }
-                }
-                .onChange(of: selectedTrashAutoCleanup) { _, newValue in
-                    trashAutoCleanup = newValue.rawValue
-                }
-
-                Text("回收站中的条目在设定天数后自动永久删除。建议设置为「不自动清理」以避免误删。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } header: {
-                Text("回收站")
-            }
 
             Section {
                 LabeledContent("版本", value: "1.0.0 (M3)")

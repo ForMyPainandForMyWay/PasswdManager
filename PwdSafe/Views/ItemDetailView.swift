@@ -4,6 +4,7 @@ struct ItemDetailView: View {
     let repository: VaultRepository
 
     @State private var revealedPassword: String?
+    @State private var revealedSecret: SecretPayload?
     @State private var isRevealing: Bool = false
     @State private var revealError: String?
     @State private var copiedField: String?
@@ -40,6 +41,7 @@ struct ItemDetailView: View {
                 headerSection(for: item)
                 Divider()
                 fieldSection(for: item)
+                passwordHistorySection
                 Divider()
                 metadataSection(for: item)
             }
@@ -47,6 +49,7 @@ struct ItemDetailView: View {
         }
         .onChange(of: item.id) { _, _ in
             revealedPassword = nil
+            revealedSecret = nil
             revealError = nil
         }
         .sheet(isPresented: $showEnlarged) {
@@ -334,8 +337,58 @@ struct ItemDetailView: View {
                 Text(item.updatedAt, style: .date)
             }
             .font(.callout)
+
+            if let lastUsed = item.lastUsedAt {
+                HStack {
+                    Text("上次使用")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(lastUsed, style: .relative)
+                }
+                .font(.callout)
+            }
         }
     }
+
+    @ViewBuilder
+    private var passwordHistorySection: some View {
+        if let secret = revealedSecret, !secret.passwordHistory.isEmpty {
+            let sortedHistory = secret.passwordHistory.sorted { $0.timestamp > $1.timestamp }
+            VStack(spacing: 0) {
+                Label("密码历史记录", systemImage: "clock")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+
+                ForEach(Array(sortedHistory.enumerated()), id: \.offset) { index, entry in
+                    if index > 0 {
+                        Divider()
+                            .padding(.vertical, 4)
+                    }
+                    HStack {
+                        Text(entry.timestamp, formatter: ItemDetailView.historyDateFormatter)
+                            .font(.body)
+                        Spacer()
+                        Text(String(entry.passwordHash.prefix(8)) + "...")
+                            .font(.body.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private static let historyDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter
+    }()
 
     private func revealPassword(_ item: VaultItem) async {
         isRevealing = true
@@ -343,6 +396,7 @@ struct ItemDetailView: View {
         do {
             let secret = try await repository.revealSecret(id: item.id)
             revealedPassword = secret.password
+            revealedSecret = secret
         } catch let error as AuthError {
             if case .cancelled = error {
                 revealError = nil

@@ -17,7 +17,7 @@ struct VaultRepositoryTests {
             cryptoService: crypto,
             keychainStore: mockKeychain
         )
-        try? await repository.initializeVault()
+        _ = try? await repository.initializeVault()
         await repository.loadSampleData()
     }
 

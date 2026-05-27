@@ -1,9 +1,7 @@
 import Foundation
-import SwiftData
 
-@Model
-final class VaultItem {
-    @Attribute(.unique) var id: UUID
+final class VaultItem: Identifiable {
+    var id: UUID
     var title: String
     var website: String?
     var username: String?
@@ -18,10 +16,8 @@ final class VaultItem {
     var updatedAt: Date
     var lastUsedAt: Date?
 
-    @Relationship(deleteRule: .nullify)
     var group: VaultGroup?
 
-    @Relationship
     var tags: [VaultTag]
 
     init(

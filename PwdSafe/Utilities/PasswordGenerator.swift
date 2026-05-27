@@ -104,13 +104,5 @@ struct PasswordGenerator: Sendable {
         }
     }
 
-    static func entropyBits(of password: String) -> Double {
-        var poolSize = 0
-        if password.contains(where: { uppercaseLetters.contains($0) }) { poolSize += 26 }
-        if password.contains(where: { lowercaseLetters.contains($0) }) { poolSize += 26 }
-        if password.contains(where: { digits.contains($0) }) { poolSize += 10 }
-        if password.contains(where: { symbols.contains($0) }) { poolSize += 32 }
-        guard poolSize > 0 else { return 0 }
-        return Double(password.count) * log2(Double(poolSize))
     }
-}
+

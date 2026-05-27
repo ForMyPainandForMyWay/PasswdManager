@@ -1,16 +1,13 @@
 import Foundation
 
-struct SecretPayload: Codable, Sendable {
-    var password: String
-    var secureNote: String?
-    var totpSeed: String?
-    var customFields: [SecretField]
+struct PasswordHistoryEntry: Codable, Hashable, Sendable {
+    var timestamp: Date
+    var passwordHash: String
 }
 
-struct SecretField: Codable, Hashable, Sendable {
-    var name: String
-    var value: String
-    var isHidden: Bool
+struct SecretPayload: Codable, Sendable {
+    var password: String
+    var passwordHistory: [PasswordHistoryEntry] = []
 }
 
 struct EncryptedSecret: Codable, Sendable {

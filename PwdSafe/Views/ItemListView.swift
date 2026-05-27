@@ -23,7 +23,7 @@ struct ItemListView: View {
         HStack {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("搜索标题、网址、用户名...", text: $repository.searchQuery)
+            TextField("搜索标题、网址、用户名、分组、标签...", text: $repository.searchQuery)
                 .textFieldStyle(.plain)
             if !repository.searchQuery.isEmpty {
                 Button {
@@ -45,7 +45,11 @@ struct ItemListView: View {
             set: { repository.selectItem($0) }
         )) {
             ForEach(displayedItems) { item in
-                ItemRowView(item: item, repository: repository, isTrashMode: isTrashMode)
+                ItemRowView(
+                    item: item,
+                    repository: repository,
+                    isTrashMode: isTrashMode
+                )
                     .tag(item.id)
                     .swipeActions(edge: .trailing) {
                         if isTrashMode {
@@ -117,7 +121,6 @@ struct ItemListView: View {
     private var bottomToolbar: some View {
         HStack {
             Spacer()
-
             Text("\(displayedItems.count) 个项目")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -196,6 +199,19 @@ struct ItemRowView: View {
                     repository.moveToTrash(ids: [item.id])
                 } label: {
                     Label("移到回收站", systemImage: "trash")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    Task {
+                        do {
+                            try await repository.permanentlyDelete(ids: [item.id])
+                        } catch AuthError.cancelled {
+                        } catch {
+                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
+                        }
+                    }
+                } label: {
+                    Label("永久删除", systemImage: "trash.fill")
                 }
             }
         }

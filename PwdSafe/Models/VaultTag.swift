@@ -1,9 +1,7 @@
 import Foundation
-import SwiftData
 
-@Model
-final class VaultTag {
-    @Attribute(.unique) var id: UUID
+final class VaultTag: Identifiable {
+    var id: UUID
     var name: String
     var colorHex: String?
     var colorHexes: [String]?

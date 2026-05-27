@@ -16,12 +16,7 @@ struct CryptoServiceTests {
     @Test func testEncryptAndDecrypt() throws {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(
-            password: "MySecretP@ssw0rd!",
-            secureNote: "Test note",
-            totpSeed: nil,
-            customFields: []
-        )
+        let payload = SecretPayload(password: "MySecretP@ssw0rd!")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
 
@@ -33,14 +28,13 @@ struct CryptoServiceTests {
 
         let decrypted = try cryptoService.decrypt(encrypted, itemID: itemID, vaultKey: vaultKey)
         #expect(decrypted.password == "MySecretP@ssw0rd!")
-        #expect(decrypted.secureNote == "Test note")
     }
 
     @Test func testEncryptWithDifferentKeysProducesDifferentResults() throws {
         let key1 = try cryptoService.createVaultKey()
         let key2 = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted1 = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key1)
         let encrypted2 = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key2)
@@ -50,7 +44,7 @@ struct CryptoServiceTests {
 
     @Test func testEncryptWithDifferentItemIDsProducesDifferentResults() throws {
         let vaultKey = try cryptoService.createVaultKey()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted1 = try cryptoService.encrypt(payload, itemID: UUID(), vaultKey: vaultKey)
         let encrypted2 = try cryptoService.encrypt(payload, itemID: UUID(), vaultKey: vaultKey)
@@ -62,7 +56,7 @@ struct CryptoServiceTests {
         let vaultKey = try cryptoService.createVaultKey()
         let wrongKey = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
 
@@ -75,7 +69,7 @@ struct CryptoServiceTests {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID1 = UUID()
         let itemID2 = UUID()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID1, vaultKey: vaultKey)
 
@@ -87,7 +81,7 @@ struct CryptoServiceTests {
     @Test func testTamperedCiphertextFails() throws {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
 
@@ -102,7 +96,7 @@ struct CryptoServiceTests {
     @Test func testTamperedTagFails() throws {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(password: "test", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "test")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
 
@@ -114,33 +108,11 @@ struct CryptoServiceTests {
         }
     }
 
-    @Test func testCustomFieldsRoundtrip() throws {
-        let vaultKey = try cryptoService.createVaultKey()
-        let itemID = UUID()
-        let payload = SecretPayload(
-            password: "p@ss",
-            secureNote: nil,
-            totpSeed: nil,
-            customFields: [
-                SecretField(name: "API Key", value: "sk-12345", isHidden: true),
-                SecretField(name: "Recovery Email", value: "recovery@test.com", isHidden: false),
-            ]
-        )
-
-        let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
-        let decrypted = try cryptoService.decrypt(encrypted, itemID: itemID, vaultKey: vaultKey)
-
-        #expect(decrypted.customFields.count == 2)
-        #expect(decrypted.customFields[0].name == "API Key")
-        #expect(decrypted.customFields[0].isHidden == true)
-        #expect(decrypted.customFields[1].name == "Recovery Email")
-    }
-
     @Test func testLongPasswordRoundtrip() throws {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID = UUID()
         let longPassword = String(repeating: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%", count: 20)
-        let payload = SecretPayload(password: longPassword, secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: longPassword)
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
         let decrypted = try cryptoService.decrypt(encrypted, itemID: itemID, vaultKey: vaultKey)
@@ -151,7 +123,7 @@ struct CryptoServiceTests {
     @Test func testEmptyPasswordRoundtrip() throws {
         let vaultKey = try cryptoService.createVaultKey()
         let itemID = UUID()
-        let payload = SecretPayload(password: "", secureNote: nil, totpSeed: nil, customFields: [])
+        let payload = SecretPayload(password: "")
 
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: vaultKey)
         let decrypted = try cryptoService.decrypt(encrypted, itemID: itemID, vaultKey: vaultKey)
@@ -163,20 +135,12 @@ struct CryptoServiceTests {
 struct SecretPayloadTests {
 
     @Test func testCodableRoundtrip() throws {
-        let payload = SecretPayload(
-            password: "Test123!",
-            secureNote: "Note",
-            totpSeed: "JBSWY3DPEHPK3PXP",
-            customFields: [SecretField(name: "key", value: "val", isHidden: true)]
-        )
+        let payload = SecretPayload(password: "Test123!")
 
         let data = try JSONEncoder().encode(payload)
         let decoded = try JSONDecoder().decode(SecretPayload.self, from: data)
 
         #expect(decoded.password == "Test123!")
-        #expect(decoded.secureNote == "Note")
-        #expect(decoded.totpSeed == "JBSWY3DPEHPK3PXP")
-        #expect(decoded.customFields.count == 1)
     }
 }
 
@@ -211,8 +175,6 @@ final class MockAuthService: AuthService, @unchecked Sendable {
     private var viewSecretValid: Bool = false
     private var destructiveValid: Bool = false
 
-    var isSessionValid: Bool { viewSecretValid }
-
     func authenticate(reason: String, scope: AuthScope) async throws {
         let isValid = scope == .viewSecret ? viewSecretValid : destructiveValid
         if isValid { return }
@@ -227,13 +189,6 @@ final class MockAuthService: AuthService, @unchecked Sendable {
     }
 
     func canAuthenticate() -> Bool { canAuth }
-
-    func invalidateSession(scope: AuthScope) {
-        switch scope {
-        case .viewSecret: viewSecretValid = false
-        case .destructive: destructiveValid = false
-        }
-    }
 
     func invalidateAllSessions() {
         viewSecretValid = false
@@ -250,7 +205,6 @@ final class MockKeychainStore: KeychainStore, @unchecked Sendable {
         guard let data = vaultKeyData else { throw KeychainError.itemNotFound }
         return data
     }
-    func deleteVaultKey() throws { vaultKeyData = nil }
     func storeSecret(_ data: Data, for secretRef: String) throws { secrets[secretRef] = data }
     func loadSecret(for secretRef: String) throws -> Data {
         guard let data = secrets[secretRef] else { throw KeychainError.itemNotFound }
@@ -276,7 +230,7 @@ struct VaultRepositoryM2Tests {
             cryptoService: crypto,
             keychainStore: mockKeychain
         )
-        try await repository.initializeVault()
+        _ = try await repository.initializeVault()
     }
 
     @Test mutating func testInitializeVaultCreatesKey() async throws {
@@ -285,7 +239,7 @@ struct VaultRepositoryM2Tests {
             cryptoService: AESCryptoService(),
             keychainStore: mockKeychain
         )
-        try await repo.initializeVault()
+        _ = try await repo.initializeVault()
         #expect(repo.isVaultReady)
     }
 

@@ -24,9 +24,7 @@ enum AuthScope: Sendable {
 protocol AuthService: Sendable {
     func authenticate(reason: String, scope: AuthScope) async throws
     func canAuthenticate() -> Bool
-    func invalidateSession(scope: AuthScope)
     func invalidateAllSessions()
-    var isSessionValid: Bool { get }
 }
 
 final class LAAuthService: AuthService, @unchecked Sendable {
@@ -35,10 +33,6 @@ final class LAAuthService: AuthService, @unchecked Sendable {
     private struct SessionState {
         var viewSecretExpiry: Date?
         var destructiveExpiry: Date?
-    }
-
-    var isSessionValid: Bool {
-        state.withLock { $0.viewSecretExpiry.map { Date() < $0 } ?? false }
     }
 
     func registerSuccessfulAuthentication(scope: AuthScope) {
@@ -93,15 +87,6 @@ final class LAAuthService: AuthService, @unchecked Sendable {
             }
         } catch {
             throw AuthError.failed
-        }
-    }
-
-    func invalidateSession(scope: AuthScope) {
-        state.withLock {
-            switch scope {
-            case .viewSecret: $0.viewSecretExpiry = nil
-            case .destructive: $0.destructiveExpiry = nil
-            }
         }
     }
 
