@@ -389,10 +389,8 @@ struct VaultWindowView: View {
                             let allIDs = repository.trashedItems.map(\.id)
                             do {
                                 try await repository.permanentlyDelete(ids: allIDs)
-                            } catch AuthError.cancelled {
-                            } catch {
-                                repository.permanentlyDeleteWithoutAuth(ids: allIDs)
-                            }
+                        } catch AuthError.cancelled {
+                        }
                         }
                     }
                     Button("取消", role: .cancel) {}
@@ -475,7 +473,6 @@ struct VaultWindowView: View {
             try await repository.permanentlyDelete(ids: [item.id])
         } catch AuthError.cancelled {
         } catch {
-            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
         }
     }
 

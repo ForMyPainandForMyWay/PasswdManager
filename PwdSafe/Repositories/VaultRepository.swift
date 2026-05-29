@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import CryptoKit
+import os
 
 enum VaultError: Error {
     case notInitialized
@@ -132,7 +133,7 @@ final class VaultRepository {
         let itemID = UUID()
         let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key)
         let encryptedData = try JSONEncoder().encode(encrypted)
-        storeSecretData(encryptedData, for: secretRef)
+        try storeSecretData(encryptedData, for: secretRef)
         let item = VaultItem(
             id: itemID, title: draft.title, website: draft.website,
             username: draft.username, email: draft.email, phone: draft.phone,
@@ -170,7 +171,7 @@ final class VaultRepository {
             let payload = SecretPayload(password: password, passwordHistory: passwordHistory)
             let encrypted = try cryptoService.encrypt(payload, itemID: item.id, vaultKey: key)
             let encryptedData = try JSONEncoder().encode(encrypted)
-            storeSecretData(encryptedData, for: item.secretRef)
+            try storeSecretData(encryptedData, for: item.secretRef)
         }
         item.updatedAt = Date()
         saveMetadata()
@@ -328,7 +329,7 @@ final class VaultRepository {
             let payload = SecretPayload(password: password)
             if let encrypted = try? cryptoService.encrypt(payload, itemID: itemID, vaultKey: key),
                let encryptedData = try? JSONEncoder().encode(encrypted) {
-                storeSecretData(encryptedData, for: secretRef)
+                try? storeSecretData(encryptedData, for: secretRef)
             }
             let item = VaultItem(id: itemID, title: title, website: website, username: username,
                                  email: email.isEmpty ? nil : email, phone: phone.isEmpty ? nil : phone,
@@ -338,9 +339,9 @@ final class VaultRepository {
         }
     }
 
-    func storeSecretData(_ data: Data, for secretRef: String) {
+    func storeSecretData(_ data: Data, for secretRef: String) throws {
         memorySecrets[secretRef] = data
-        try? keychainStore.storeSecret(data, for: secretRef)
+        try keychainStore.storeSecret(data, for: secretRef)
     }
 
     private func loadSecretData(for secretRef: String) throws -> Data {
@@ -432,7 +433,7 @@ final class VaultRepository {
             let payload = SecretPayload(password: password)
             let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key)
             let encryptedData = try JSONEncoder().encode(encrypted)
-            storeSecretData(encryptedData, for: secretRef)
+            try storeSecretData(encryptedData, for: secretRef)
 
             let item = VaultItem(
                 id: itemID, title: csvItem.title, website: csvItem.website,
@@ -450,6 +451,7 @@ final class VaultRepository {
 
     func lock() {
         isLocked = true
+        memorySecrets.removeAll()
         if let auth = authService as? LAAuthService { auth.invalidateAllSessions() }
     }
 
@@ -464,7 +466,11 @@ final class VaultRepository {
     // MARK: - Persistence
 
     private var dataDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            let fallback = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("PwdSafe")
+            try? FileManager.default.createDirectory(at: fallback, withIntermediateDirectories: true)
+            return fallback
+        }
         let dir = appSupport.appendingPathComponent("PwdSafe")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
@@ -492,7 +498,11 @@ final class VaultRepository {
         }
         let data = PersistedVaultData(items: persistedItems, groups: persistedGroups, tags: persistedTags)
         if let encoded = try? JSONEncoder().encode(data) {
-            try? encoded.write(to: metadataURL, options: .atomic)
+            do {
+                try encoded.write(to: metadataURL, options: .atomic)
+            } catch {
+                Logger(subsystem: "com.pwdsafe.app", category: "persistence").error("failed to save metadata: \(error)")
+            }
         }
         items = items
         groups = groups

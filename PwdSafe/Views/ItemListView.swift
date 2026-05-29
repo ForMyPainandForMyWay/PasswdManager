@@ -58,8 +58,6 @@ struct ItemListView: View {
                                         do {
                                             try await repository.permanentlyDelete(ids: [item.id])
                                         } catch AuthError.cancelled {
-                                        } catch {
-                                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
                                         }
                                     }
                                 } label: {
@@ -178,8 +176,6 @@ struct ItemRowView: View {
                                         do {
                                             try await repository.permanentlyDelete(ids: [item.id])
                                         } catch AuthError.cancelled {
-                                        } catch {
-                                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
                                         }
                                     }
                                 } label: {
@@ -205,15 +201,13 @@ struct ItemRowView: View {
                     Task {
                         do {
                             try await repository.permanentlyDelete(ids: [item.id])
-                        } catch AuthError.cancelled {
-                        } catch {
-                            repository.permanentlyDeleteWithoutAuth(ids: [item.id])
-                        }
-                    }
-                } label: {
-                    Label("永久删除", systemImage: "trash.fill")
-                }
-            }
+                                        } catch AuthError.cancelled {
+                                        }
+                                    }
+                                } label: {
+                                    Label("永久删除", systemImage: "trash.fill")
+                                }
+                            }
         }
     }
 }
