@@ -48,8 +48,7 @@ struct PasswordGeneratorView: View {
                 Spacer()
 
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(currentPassword, forType: .string)
+                    ClipboardCleaner().copyToClipboard(currentPassword, clearAfter: 30)
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }

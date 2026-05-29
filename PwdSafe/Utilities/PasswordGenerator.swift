@@ -76,7 +76,7 @@ struct PasswordGenerator: Sendable {
 
     private static func ensureCharacter(from set: String, in password: String, charsetArray: [Character]) -> String {
         var result = Array(password)
-        let randomChar = set.randomElement()!
+        guard let randomChar = set.randomElement() else { return password }
         let randomPos = Int.random(in: 0..<result.count)
         result[randomPos] = randomChar
         return String(result)

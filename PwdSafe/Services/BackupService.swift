@@ -42,6 +42,7 @@ enum BackupError: Error {
     case wrongPassword
     case legacyVersionUnsupported
     case needsPassword
+    case fileTooLarge
 }
 
 struct BackupService: Sendable {
@@ -112,11 +113,12 @@ struct BackupService: Sendable {
         // Layer 2a: generate salt, derive key from password, encrypt backupKey
         var salt = Data(count: 32)
         guard salt.withUnsafeMutableBytes({ ptr in
-            SecRandomCopyBytes(kSecRandomDefault, 32, ptr.baseAddress!)
+            guard let addr = ptr.baseAddress else { return errSecParam }
+            return SecRandomCopyBytes(kSecRandomDefault, 32, addr)
         }) == errSecSuccess else { throw BackupError.writeFailed }
         record.salt = salt
 
-        let wrappingKey = deriveKey(password: password, salt: salt)
+        let wrappingKey = try deriveKey(password: password, salt: salt)
         let backupBox = try AES.GCM.seal(backupKeyData, using: wrappingKey)
         record.encryptedBackupKey = backupBox.combined
 
@@ -148,7 +150,7 @@ struct BackupService: Sendable {
               let backupCombined = record.encryptedBackupKey else {
             throw BackupError.missingVaultKey
         }
-        let wrappingKey = deriveKey(password: password, salt: salt)
+        let wrappingKey = try deriveKey(password: password, salt: salt)
         let backupBox = try AES.GCM.SealedBox(combined: backupCombined)
         let backupKeyData: Data
         do {
@@ -165,6 +167,9 @@ struct BackupService: Sendable {
     // MARK: - File I/O
 
     static func readBackup(from url: URL) throws -> BackupRecord {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = attributes[.size] as? UInt64 ?? 0
+        guard fileSize <= 100_000_000 else { throw BackupError.fileTooLarge }
         let data = try Data(contentsOf: url)
         let record = try JSONDecoder().decode(BackupRecord.self, from: data)
         guard record.version <= currentVersion else { throw BackupError.versionMismatch }
@@ -213,7 +218,7 @@ struct BackupService: Sendable {
                 continue
             }
             let sr = UUID().uuidString
-            repository.storeSecretData(try JSONEncoder().encode(bi.encryptedSecret), for: sr)
+            try? repository.storeSecretData(try JSONEncoder().encode(bi.encryptedSecret), for: sr)
             repository.appendItem(VaultItem(
                 id: bi.id, title: bi.title, website: bi.website, username: bi.username,
                 email: bi.email, phone: bi.phone, notePreview: bi.notePreview,
@@ -239,11 +244,15 @@ struct BackupService: Sendable {
         case missingHeader
         case invalidColumnCount
         case malformedRow(Int)
+        case fileTooLarge
     }
 
     static func parseCSV(from url: URL) throws -> [CSVImportItem] {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        let fileSize = attributes[.size] as? UInt64 ?? 0
+        guard fileSize <= 10_000_000 else { throw CSVImportError.fileTooLarge }
         let content = try String(contentsOf: url, encoding: .utf8)
-        let lines = parseCSVLines(content)
+        let lines = try parseCSVLines(content)
         guard !lines.isEmpty else { throw CSVImportError.emptyFile }
 
         let header = lines[0]
@@ -271,13 +280,25 @@ struct BackupService: Sendable {
         return result
     }
 
-    private static func parseCSVLines(_ content: String) -> [[String]] {
+    private static func parseCSVLines(_ content: String) throws -> [[String]] {
+        let maxFieldSize = 65536
         var lines: [[String]] = []
         var currentRow: [String] = []
         var currentField = ""
         var inQuotes = false
+        var lineNumber = 1
+        var pendingCR = false
 
         for char in content {
+            if pendingCR {
+                pendingCR = false
+                if char == "\n" { continue }
+            }
+
+            if currentField.count >= maxFieldSize {
+                throw CSVImportError.malformedRow(lineNumber)
+            }
+
             switch char {
             case "\"":
                 if inQuotes {
@@ -292,7 +313,18 @@ struct BackupService: Sendable {
                     currentRow.append(currentField)
                     currentField = ""
                 }
-            case "\n", "\r\n":
+            case "\r":
+                pendingCR = true
+                if !inQuotes {
+                    currentRow.append(currentField)
+                    if !currentRow.isEmpty && !(currentRow.count == 1 && currentRow[0].isEmpty) {
+                        lines.append(currentRow)
+                    }
+                    currentRow = []
+                    currentField = ""
+                    lineNumber += 1
+                }
+            case "\n":
                 if inQuotes {
                     currentField.append(char)
                 } else {
@@ -302,12 +334,15 @@ struct BackupService: Sendable {
                     }
                     currentRow = []
                     currentField = ""
+                    lineNumber += 1
                 }
-            case "\r":
-                break
             default:
                 currentField.append(char)
             }
+        }
+
+        if pendingCR {
+            currentField.append("\r")
         }
 
         currentRow.append(currentField)
@@ -356,8 +391,9 @@ struct BackupService: Sendable {
 
     // MARK: - Private
 
-    private static func deriveKey(password: String, salt: Data) -> SymmetricKey {
-        let pwd = SymmetricKey(data: password.data(using: .utf8)!)
+    private static func deriveKey(password: String, salt: Data) throws -> SymmetricKey {
+        guard let pwdData = password.data(using: .utf8) else { throw BackupError.writeFailed }
+        let pwd = SymmetricKey(data: pwdData)
         var derived = Data()
         var u = salt
         u.append(contentsOf: withUnsafeBytes(of: UInt32(1).bigEndian) { Data($0) })

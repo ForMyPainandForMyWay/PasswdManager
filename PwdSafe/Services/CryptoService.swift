@@ -40,7 +40,7 @@ final class AESCryptoService: CryptoService, Sendable {
         return EncryptedSecret(
             version: 1,
             algorithm: algorithmName,
-            keyID: vaultKey.hashValueHex(),
+            keyID: UUID().uuidString,
             nonce: Data(nonce),
             ciphertext: sealedBox.ciphertext,
             tag: sealedBox.tag
@@ -92,12 +92,5 @@ final class AESCryptoService: CryptoService, Sendable {
         let idBytes = withUnsafeBytes(of: itemID.uuid) { Data($0) }
         data.append(idBytes)
         return data
-    }
-}
-
-private extension SymmetricKey {
-    func hashValueHex() -> String {
-        let hash = SHA256.hash(data: self.withUnsafeBytes { Data($0) })
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 }
