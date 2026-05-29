@@ -162,8 +162,7 @@ final class VaultRepository {
             let encryptedData = try loadSecretData(for: item.secretRef)
             let encrypted = try JSONDecoder().decode(EncryptedSecret.self, from: encryptedData)
             let oldPayload = try cryptoService.decrypt(encrypted, itemID: item.id, vaultKey: key)
-            let oldHash = SHA256.hash(data: Data(oldPayload.password.utf8)).compactMap { String(format: "%02x", $0) }.joined()
-            passwordHistory = oldPayload.passwordHistory + [PasswordHistoryEntry(timestamp: Date(), passwordHash: oldHash)]
+            passwordHistory = oldPayload.passwordHistory + [PasswordHistoryEntry(timestamp: Date(), password: oldPayload.password)]
         } catch {
             passwordHistory = []
         }
@@ -397,6 +396,56 @@ final class VaultRepository {
         saveMetadata()
     }
 
+    // MARK: - CSV Import
+
+    func importCSVItems(_ csvItems: [BackupService.CSVImportItem]) async throws {
+        try await authService.authenticate(reason: "导入 CSV 数据", scope: .destructive)
+        guard let key = vaultKey else { throw VaultError.notInitialized }
+
+        var importedCount = 0
+        for csvItem in csvItems {
+            let group: VaultGroup? = csvItem.groupName.flatMap { name in
+                if let existing = groups.first(where: { $0.name == name }) { return existing }
+                let ng = VaultGroup(name: name, sortOrder: groups.count)
+                groups.append(ng)
+                return ng
+            }
+
+            let resolvedTags: [VaultTag] = csvItem.tagNames.compactMap { name in
+                if let existing = tags.first(where: { $0.name == name }) { return existing }
+                let nt = VaultTag(name: name)
+                tags.append(nt)
+                return nt
+            }
+
+            let password: String
+            if let pwd = csvItem.password, !pwd.isEmpty, pwd != "[认证失败]" {
+                password = pwd
+            } else {
+                password = PasswordGenerator.generate(options: PasswordGenerator.Options(
+                    length: 20, includeUppercase: true, includeLowercase: true, includeDigits: true, includeSymbols: true
+                ))
+            }
+
+            let secretRef = UUID().uuidString
+            let itemID = UUID()
+            let payload = SecretPayload(password: password)
+            let encrypted = try cryptoService.encrypt(payload, itemID: itemID, vaultKey: key)
+            let encryptedData = try JSONEncoder().encode(encrypted)
+            storeSecretData(encryptedData, for: secretRef)
+
+            let item = VaultItem(
+                id: itemID, title: csvItem.title, website: csvItem.website,
+                username: csvItem.username, email: csvItem.email, phone: csvItem.phone,
+                notePreview: csvItem.notePreview, secretRef: secretRef,
+                group: group, tags: resolvedTags
+            )
+            self.items.append(item)
+            importedCount += 1
+        }
+        if importedCount > 0 { saveMetadata() }
+    }
+
     // MARK: - Lock / Unlock
 
     func lock() {
@@ -445,6 +494,9 @@ final class VaultRepository {
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: metadataURL, options: .atomic)
         }
+        items = items
+        groups = groups
+        tags = tags
     }
 
     private func loadMetadata() {
