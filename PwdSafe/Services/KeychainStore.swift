@@ -21,7 +21,7 @@ protocol KeychainStore: Sendable {
 final class KeychainStoreImpl: KeychainStore, Sendable {
     private let serviceName = "PwdSafe.Secret"
     private let vaultKeyAccount = "PwdSafe.VaultKey"
-    private let accessControl: SecAccessControl = {
+    private let vaultKeyAccessControl: SecAccessControl = {
         SecAccessControlCreateWithFlags(
             nil,
             kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
@@ -32,9 +32,9 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
 
     func storeVaultKey(_ key: Data) throws {
         _ = deleteGenericPassword(account: vaultKeyAccount)
-        let status = saveGenericPassword(account: vaultKeyAccount, data: key)
+        let status = saveGenericPassword(account: vaultKeyAccount, data: key, accessControl: vaultKeyAccessControl)
         if status == errSecDuplicateItem {
-            _ = updateGenericPassword(account: vaultKeyAccount, data: key)
+            _ = updateGenericPassword(account: vaultKeyAccount, data: key, accessControl: vaultKeyAccessControl)
             return
         }
         guard status == errSecSuccess else {
@@ -85,25 +85,29 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
         case error(OSStatus)
     }
 
-    private func saveGenericPassword(account: String, data: Data) -> OSStatus {
-        let query: [String: Any] = [
+    private func saveGenericPassword(account: String, data: Data, accessControl: SecAccessControl? = nil) -> OSStatus {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecAttrAccessControl as String: accessControl,
         ]
+        if let ac = accessControl {
+            query[kSecAttrAccessControl as String] = ac
+        }
         return SecItemAdd(query as CFDictionary, nil)
     }
 
-    private func updateGenericPassword(account: String, data: Data) -> OSStatus {
-        let query: [String: Any] = [
+    private func updateGenericPassword(account: String, data: Data, accessControl: SecAccessControl? = nil) -> OSStatus {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
-            kSecAttrAccessControl as String: accessControl,
         ]
+        if let ac = accessControl {
+            query[kSecAttrAccessControl as String] = ac
+        }
         let attrs: [String: Any] = [kSecValueData as String: data]
         return SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
     }

@@ -18,6 +18,8 @@ struct ItemEditorView: View {
     @State private var selectedTagIDs: [UUID] = []
     @State private var isSaving: Bool = false
     @State private var showPasswordGenerator: Bool = false
+    @State private var saveError: String?
+    @State private var showSaveError: Bool = false
 
     enum EditorMode {
         case create
@@ -107,6 +109,11 @@ struct ItemEditorView: View {
         .sheet(isPresented: $showPasswordGenerator) {
             PasswordGeneratorView(generatedPassword: $password)
         }
+        .alert("保存失败", isPresented: $showSaveError) {
+            Button("确定", role: .cancel) { saveError = nil }
+        } message: {
+            Text(saveError ?? "未知错误")
+        }
     }
 
     private func toggleTag(_ id: UUID) {
@@ -153,6 +160,8 @@ struct ItemEditorView: View {
                 dismiss()
             } catch {
                 isSaving = false
+                saveError = error.localizedDescription
+                showSaveError = true
             }
         }
     }
