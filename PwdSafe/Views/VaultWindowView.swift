@@ -92,6 +92,10 @@ struct VaultWindowView: View {
     @State private var pendingImportURL: URL?
     @State private var exportPassword: String = ""
     @State private var importPassword: String = ""
+    @State private var showCSVExportWarning: Bool = false
+    @State private var showCSVImportPanel: Bool = false
+    @State private var csvImportError: String?
+    @State private var showCSVImportError: Bool = false
     @State private var lastActiveDate: Date = .distantPast
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("autoLockTimeout") private var autoLockTimeout: Int = AutoLockTimeout.minute5.rawValue
@@ -240,9 +244,14 @@ struct VaultWindowView: View {
                                         Label("导入加密备份...", systemImage: "square.and.arrow.down")
                                     }
                                     Button {
-                                        Task { await performCSVExport() }
+                                        showCSVExportWarning = true
                                     } label: {
                                         Label("导出 CSV...", systemImage: "tablecells")
+                                    }
+                                    Button {
+                                        showCSVImportPanel = true
+                                    } label: {
+                                        Label("导入 CSV...", systemImage: "arrow.down.doc")
                                     }
                                     Divider()
                                     Button {
@@ -264,6 +273,7 @@ struct VaultWindowView: View {
                 .sheet(isPresented: $repository.isEditorPresented) {
                     if let item = repository.editingItem {
                         ItemEditorView(repository: repository, mode: .edit(item), startAsFavorite: false)
+                            .id(item.id)
                     } else {
                         ItemEditorView(repository: repository, mode: .create, startAsFavorite: repository.newItemStartAsFavorite)
                     }
@@ -305,6 +315,33 @@ struct VaultWindowView: View {
                         importError = error.localizedDescription
                         showImportError = true
                     }
+                }
+                .fileImporter(
+                    isPresented: $showCSVImportPanel,
+                    allowedContentTypes: [.commaSeparatedText, .plainText],
+                    allowsMultipleSelection: false
+                ) { result in
+                    switch result {
+                    case .success(let urls):
+                        guard let url = urls.first else { return }
+                        Task { await performCSVImport(url: url) }
+                    case .failure(let error):
+                        csvImportError = error.localizedDescription
+                        showCSVImportError = true
+                    }
+                }
+                .alert("CSV 导入失败", isPresented: $showCSVImportError) {
+                    Button("确定", role: .cancel) {}
+                } message: {
+                    Text(csvImportError ?? "未知错误")
+                }
+                .alert("CSV 导出安全警告", isPresented: $showCSVExportWarning) {
+                    Button("取消", role: .cancel) {}
+                    Button("继续导出", role: .destructive) {
+                        Task { await performCSVExport() }
+                    }
+                } message: {
+                    Text("CSV 文件以明文形式存储所有密码数据，任何人获取此文件即可读取您的所有密码。请确保将文件保存在安全的位置，导出后建议立即删除。")
                 }
                 .alert("导出失败", isPresented: $showExportError) {
                     Button("确定", role: .cancel) {}
@@ -491,6 +528,28 @@ struct VaultWindowView: View {
         } catch {
             exportError = error.localizedDescription
             showExportError = true
+        }
+    }
+
+    private func performCSVImport(url: URL) async {
+        do {
+            let csvItems = try BackupService.parseCSV(from: url)
+            guard !csvItems.isEmpty else {
+                csvImportError = "CSV 文件中没有有效数据。"
+                showCSVImportError = true
+                return
+            }
+            try await repository.importCSVItems(csvItems)
+        } catch BackupService.CSVImportError.missingHeader {
+            csvImportError = "CSV 格式不正确：缺少表头行。请使用 PwdSafe 导出的 CSV 格式。"
+            showCSVImportError = true
+        } catch BackupService.CSVImportError.invalidColumnCount {
+            csvImportError = "CSV 列数不匹配，请确认文件格式正确。"
+            showCSVImportError = true
+        } catch AuthError.cancelled {
+        } catch {
+            csvImportError = error.localizedDescription
+            showCSVImportError = true
         }
     }
 

@@ -9,6 +9,8 @@ struct ItemDetailView: View {
     @State private var revealError: String?
     @State private var copiedField: String?
     @State private var hoveredField: String?
+    @State private var revealedHistoryIndices: Set<Int> = []
+    @State private var isRevealingHistory: Bool = false
     @State private var enlargedText: String?
     @State private var showEnlarged: Bool = false
 
@@ -51,6 +53,19 @@ struct ItemDetailView: View {
             revealedPassword = nil
             revealedSecret = nil
             revealError = nil
+            revealedHistoryIndices = []
+        }
+        .onChange(of: item.updatedAt) { _, _ in
+            if revealedSecret != nil, let currentItem = repository.selectedItem(), currentItem.id == item.id {
+                Task {
+                    do {
+                        let secret = try await repository.revealSecret(id: item.id)
+                        revealedPassword = secret.password
+                        revealedSecret = secret
+                        revealedHistoryIndices = []
+                    } catch { }
+                }
+            }
         }
         .sheet(isPresented: $showEnlarged) {
             if let text = enlargedText {
@@ -343,7 +358,7 @@ struct ItemDetailView: View {
                     Text("上次使用")
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(lastUsed, style: .relative)
+                    Text(lastUsed, formatter: ItemDetailView.lastUsedDateFormatter)
                 }
                 .font(.callout)
             }
@@ -362,6 +377,11 @@ struct ItemDetailView: View {
                     .padding(.bottom, 8)
 
                 ForEach(Array(sortedHistory.enumerated()), id: \.offset) { index, entry in
+                    let fieldKey = "history_\(index)"
+                    let isCopied = copiedField == fieldKey
+                    let isHovered = hoveredField == fieldKey
+                    let isRevealed = revealedHistoryIndices.contains(index)
+
                     if index > 0 {
                         Divider()
                             .padding(.vertical, 4)
@@ -370,9 +390,28 @@ struct ItemDetailView: View {
                         Text(entry.timestamp, formatter: ItemDetailView.historyDateFormatter)
                             .font(.body)
                         Spacer()
-                        Text(String(entry.passwordHash.prefix(8)) + "...")
-                            .font(.body.monospaced())
-                            .foregroundStyle(.secondary)
+                        if isRevealed {
+                            interactiveHistoryPassword(
+                                password: entry.password, fieldKey: fieldKey,
+                                isCopied: isCopied, isHovered: isHovered
+                            )
+                        } else {
+                            Button {
+                                Task { await revealHistoryPassword(at: index) }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if isRevealingHistory {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Image(systemName: "eye")
+                                    }
+                                    Text("点击查看")
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isRevealingHistory)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
@@ -382,7 +421,94 @@ struct ItemDetailView: View {
         }
     }
 
+    private func interactiveHistoryPassword(password: String, fieldKey: String, isCopied: Bool, isHovered: Bool) -> some View {
+        Group {
+            ZStack {
+                Text(password)
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .opacity(isCopied ? 0 : 1)
+                    .scaleEffect(isCopied ? 0.8 : 1.0)
+                Text("已拷贝")
+                    .font(.body.monospaced())
+                    .lineLimit(1)
+                    .opacity(isCopied ? 1 : 0)
+                    .scaleEffect(isCopied ? 1.0 : 0.8)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                isHovered ? Color.secondary.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 4)
+            )
+            .animation(.easeInOut(duration: 0.25), value: isCopied)
+            .contentShape(RoundedRectangle(cornerRadius: 4))
+            .onHover { hovering in
+                hoveredField = hovering ? fieldKey : nil
+            }
+            .onTapGesture {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(password, forType: .string)
+                copiedField = fieldKey
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    if copiedField == fieldKey { copiedField = nil }
+                }
+            }
+            .contextMenu {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(password, forType: .string)
+                    copiedField = fieldKey
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        if copiedField == fieldKey { copiedField = nil }
+                    }
+                } label: {
+                    Label("复制密码", systemImage: "doc.on.doc")
+                }
+            }
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(password, forType: .string)
+                copiedField = fieldKey
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    if copiedField == fieldKey { copiedField = nil }
+                }
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.callout)
+            }
+            .buttonStyle(.plain)
+            .help("复制密码")
+        }
+    }
+
+    private func revealHistoryPassword(at index: Int) async {
+        isRevealingHistory = true
+        guard let item = repository.selectedItem() else {
+            isRevealingHistory = false
+            return
+        }
+        do {
+            let secret = try await repository.revealSecret(id: item.id, reason: "查看历史密码")
+            if index < secret.passwordHistory.count {
+                revealedHistoryIndices.insert(index)
+            }
+        } catch let error as AuthError {
+            if case .cancelled = error { }
+        } catch { }
+        isRevealingHistory = false
+    }
+
     private static let historyDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter
+    }()
+
+    private static let lastUsedDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
