@@ -2,7 +2,7 @@ import Foundation
 
 struct PasswordHistoryEntry: Codable, Hashable, Sendable {
     var timestamp: Date
-    var passwordHash: String
+    var password: String
 }
 
 struct SecretPayload: Codable, Sendable {

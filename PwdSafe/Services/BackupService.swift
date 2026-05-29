@@ -226,6 +226,97 @@ struct BackupService: Sendable {
         }
     }
 
+    // MARK: - CSV Import
+
+    struct CSVImportItem: Sendable {
+        var title: String; var website: String?; var username: String?
+        var email: String?; var phone: String?; var password: String?
+        var notePreview: String?; var groupName: String?; var tagNames: [String]
+    }
+
+    enum CSVImportError: Error {
+        case emptyFile
+        case missingHeader
+        case invalidColumnCount
+        case malformedRow(Int)
+    }
+
+    static func parseCSV(from url: URL) throws -> [CSVImportItem] {
+        let content = try String(contentsOf: url, encoding: .utf8)
+        let lines = parseCSVLines(content)
+        guard !lines.isEmpty else { throw CSVImportError.emptyFile }
+
+        let header = lines[0]
+        let expectedHeader = ["Title", "Website", "Username", "Email", "Phone", "Password", "Note", "Group", "Tags"]
+        guard header == expectedHeader else { throw CSVImportError.missingHeader }
+
+        var result: [CSVImportItem] = []
+        for (_, row) in lines.dropFirst().enumerated() {
+            guard row.count == expectedHeader.count else { throw CSVImportError.invalidColumnCount }
+            guard !row[0].isEmpty else { continue }
+
+            let tagNames = row[8].isEmpty ? [] : row[8].split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+            result.append(CSVImportItem(
+                title: row[0],
+                website: row[1].isEmpty ? nil : row[1],
+                username: row[2].isEmpty ? nil : row[2],
+                email: row[3].isEmpty ? nil : row[3],
+                phone: row[4].isEmpty ? nil : row[4],
+                password: row[5].isEmpty ? nil : row[5],
+                notePreview: row[6].isEmpty ? nil : row[6],
+                groupName: row[7].isEmpty ? nil : row[7],
+                tagNames: tagNames
+            ))
+        }
+        return result
+    }
+
+    private static func parseCSVLines(_ content: String) -> [[String]] {
+        var lines: [[String]] = []
+        var currentRow: [String] = []
+        var currentField = ""
+        var inQuotes = false
+
+        for char in content {
+            switch char {
+            case "\"":
+                if inQuotes {
+                    inQuotes = false
+                } else {
+                    inQuotes = true
+                }
+            case ",":
+                if inQuotes {
+                    currentField.append(char)
+                } else {
+                    currentRow.append(currentField)
+                    currentField = ""
+                }
+            case "\n", "\r\n":
+                if inQuotes {
+                    currentField.append(char)
+                } else {
+                    currentRow.append(currentField)
+                    if !currentRow.isEmpty && !(currentRow.count == 1 && currentRow[0].isEmpty) {
+                        lines.append(currentRow)
+                    }
+                    currentRow = []
+                    currentField = ""
+                }
+            case "\r":
+                break
+            default:
+                currentField.append(char)
+            }
+        }
+
+        currentRow.append(currentField)
+        if !currentRow.isEmpty && !(currentRow.count == 1 && currentRow[0].isEmpty) {
+            lines.append(currentRow)
+        }
+        return lines
+    }
+
     // MARK: - CSV Export
 
     @MainActor

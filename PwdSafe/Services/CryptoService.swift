@@ -30,7 +30,7 @@ final class AESCryptoService: CryptoService, Sendable {
         }
 
         let derivedKey = deriveItemKey(vaultKey: vaultKey, itemID: itemID)
-        let nonce = try AES.GCM.Nonce()
+        let nonce = AES.GCM.Nonce()
 
         let aad = makeAAD(itemID: itemID, version: 1)
         guard let sealedBox = try? AES.GCM.seal(payloadData, using: derivedKey, nonce: nonce, authenticating: aad) else {
