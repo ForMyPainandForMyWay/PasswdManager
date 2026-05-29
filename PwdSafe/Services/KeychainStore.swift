@@ -1,5 +1,5 @@
 import Foundation
-import Security
+@preconcurrency import Security
 
 enum KeychainError: Error {
     case saveFailed(OSStatus)
@@ -21,6 +21,14 @@ protocol KeychainStore: Sendable {
 final class KeychainStoreImpl: KeychainStore, Sendable {
     private let serviceName = "PwdSafe.Secret"
     private let vaultKeyAccount = "PwdSafe.VaultKey"
+    private let accessControl: SecAccessControl = {
+        SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            .userPresence,
+            nil
+        )!
+    }()
 
     func storeVaultKey(_ key: Data) throws {
         _ = deleteGenericPassword(account: vaultKeyAccount)
@@ -84,6 +92,7 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrAccessControl as String: accessControl,
         ]
         return SecItemAdd(query as CFDictionary, nil)
     }
@@ -93,6 +102,7 @@ final class KeychainStoreImpl: KeychainStore, Sendable {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: account,
+            kSecAttrAccessControl as String: accessControl,
         ]
         let attrs: [String: Any] = [kSecValueData as String: data]
         return SecItemUpdate(query as CFDictionary, attrs as CFDictionary)
