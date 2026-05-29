@@ -418,7 +418,49 @@ struct ItemDetailView: View {
             }
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+        } else if revealedSecret == nil {
+            VStack(spacing: 0) {
+                HStack {
+                    Label("密码历史记录", systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        Task { await loadHistory() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isRevealingHistory {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "eye")
+                            }
+                            Text("加载历史")
+                        }
+                        .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRevealingHistory)
+                }
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
         }
+    }
+
+    private func loadHistory() async {
+        isRevealingHistory = true
+        guard let item = repository.selectedItem() else {
+            isRevealingHistory = false
+            return
+        }
+        do {
+            let secret = try await repository.revealSecret(id: item.id, reason: "查看密码历史")
+            revealedSecret = secret
+        } catch let error as AuthError {
+            if case .cancelled = error { }
+        } catch { }
+        isRevealingHistory = false
     }
 
     private func interactiveHistoryPassword(password: String, fieldKey: String, isCopied: Bool, isHovered: Bool) -> some View {
