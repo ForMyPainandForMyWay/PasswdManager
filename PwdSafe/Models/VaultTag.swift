@@ -1,5 +1,7 @@
 import Foundation
+import Observation
 
+@Observable
 final class VaultTag: Identifiable {
     var id: UUID
     var name: String
