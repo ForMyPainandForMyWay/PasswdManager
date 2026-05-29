@@ -418,7 +418,7 @@ struct ItemDetailView: View {
             }
             .padding(12)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        } else if revealedSecret == nil {
+        } else if revealedSecret == nil, let item = repository.selectedItem(), item.passwordHistoryCount > 0 {
             VStack(spacing: 0) {
                 HStack {
                     Label("密码历史记录", systemImage: "clock")

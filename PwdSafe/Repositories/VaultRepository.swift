@@ -19,7 +19,7 @@ private struct PersistedItem: Codable {
     var email: String?; var phone: String?; var notePreview: String?
     var secretRef: String; var isFavorite: Bool; var isDeleted: Bool
     var deletedAt: Date?; var createdAt: Date; var updatedAt: Date
-    var lastUsedAt: Date?; var groupID: UUID?; var tagIDs: [UUID]
+    var lastUsedAt: Date?; var passwordHistoryCount: Int = 0; var groupID: UUID?; var tagIDs: [UUID]
 }
 
 private struct PersistedGroup: Codable {
@@ -172,6 +172,7 @@ final class VaultRepository {
             let encrypted = try cryptoService.encrypt(payload, itemID: item.id, vaultKey: key)
             let encryptedData = try JSONEncoder().encode(encrypted)
             try storeSecretData(encryptedData, for: item.secretRef)
+            item.passwordHistoryCount = passwordHistory.count
         }
         item.updatedAt = Date()
         saveMetadata()
@@ -485,7 +486,8 @@ final class VaultRepository {
                           email: item.email, phone: item.phone, notePreview: item.notePreview,
                           secretRef: item.secretRef, isFavorite: item.isFavorite, isDeleted: item.isDeleted,
                           deletedAt: item.deletedAt, createdAt: item.createdAt, updatedAt: item.updatedAt,
-                          lastUsedAt: item.lastUsedAt, groupID: item.group?.id, tagIDs: item.tags.map(\.id))
+                          lastUsedAt: item.lastUsedAt, passwordHistoryCount: item.passwordHistoryCount,
+                          groupID: item.group?.id, tagIDs: item.tags.map(\.id))
         }
         let persistedGroups = groups.map { group in
             PersistedGroup(id: group.id, name: group.name, colorHex: group.colorHex,
@@ -527,7 +529,8 @@ final class VaultRepository {
                       email: pi.email, phone: pi.phone, notePreview: pi.notePreview,
                       secretRef: pi.secretRef, isFavorite: pi.isFavorite, isDeleted: pi.isDeleted,
                       deletedAt: pi.deletedAt, createdAt: pi.createdAt, updatedAt: pi.updatedAt,
-                      lastUsedAt: pi.lastUsedAt, group: pi.groupID.flatMap { groupMap[$0] },
+                      lastUsedAt: pi.lastUsedAt, passwordHistoryCount: pi.passwordHistoryCount,
+                      group: pi.groupID.flatMap { groupMap[$0] },
                       tags: pi.tagIDs.compactMap { tagMap[$0] })
         }
         groups = loadedGroups; tags = loadedTags; items = loadedItems

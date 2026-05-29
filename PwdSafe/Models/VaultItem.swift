@@ -17,6 +17,7 @@ final class VaultItem: Identifiable {
     var createdAt: Date
     var updatedAt: Date
     var lastUsedAt: Date?
+    var passwordHistoryCount: Int = 0
 
     var group: VaultGroup?
 
@@ -37,6 +38,7 @@ final class VaultItem: Identifiable {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         lastUsedAt: Date? = nil,
+        passwordHistoryCount: Int = 0,
         group: VaultGroup? = nil,
         tags: [VaultTag] = []
     ) {
@@ -54,6 +56,7 @@ final class VaultItem: Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.lastUsedAt = lastUsedAt
+        self.passwordHistoryCount = passwordHistoryCount
         self.group = group
         self.tags = tags
     }
